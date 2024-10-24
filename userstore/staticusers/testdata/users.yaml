@@ -1,0 +1,13 @@
+users:
+  - id: "user1"
+    pw: "1234"
+    enabled: false
+  - id: "demo"
+    pw: "demo"
+    enabled: true
+  - id: "demo1"
+    pw: "$2y$10$4j9REl1ADVWGRL44qcbY3O1PfRvNnZZ/Ede6X.kobT.2FSK5uECoy"
+    enabled: true
+  - id: "demo2"
+    pw: "{SHA}22EndpT+pBtCqKyCy7Z4uqxoOZA="
+    enabled: true
