@@ -26,29 +26,27 @@ type LoginHandler struct {
 	UserStore UserStore
 }
 
-func (lh LoginHandler) CanLogin(userId string, plainPw string) bool {
+func (lh LoginHandler) CanLogin(userId string, plainPw string) (bool, error) {
 	user, err := lh.UserStore.GetUser(userId)
 
-	var notFound *NotFoundErr
-	if errors.As(err, &notFound) {
-		return false
+	if errors.Is(err, NotFoundErr) {
+		return false, nil
 	} else if err != nil {
-		// TODO handle error
+		return false, err
 	}
 
 	if !user.Enabled {
-		return false
+		return false, UserDisabledErr
 	}
 	isOk, err := CheckPass(plainPw, user.HashPw)
 	if err != nil {
-		return false
+		return false, err
 	}
-	return isOk
+	return isOk, nil
 }
 
 // NotFoundErr is thrown when a user is not found
-type NotFoundErr struct{}
+var NotFoundErr = errors.New("user not found")
 
-func (e NotFoundErr) Error() string {
-	return "user not found"
-}
+// UserDisabledErr is thrown when a user is not enabled
+var UserDisabledErr = errors.New("user is not enabled")

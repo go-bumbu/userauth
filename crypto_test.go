@@ -12,11 +12,6 @@ func TestCheckHash(t *testing.T) {
 		hash string
 	}{
 		{
-			name: "plaintext",
-			in:   "demo",
-			hash: "demo",
-		},
-		{
 			name: "sha1",
 			in:   "demo",
 			hash: "{SHA}ieSV55Qc+eQOaYDRSha/AjzNTJE=",
@@ -37,6 +32,30 @@ func TestCheckHash(t *testing.T) {
 
 			if diff := cmp.Diff(got, true); diff != "" {
 				t.Errorf("expec hash to be valid")
+			}
+		})
+	}
+}
+func TestCheckHashErrs(t *testing.T) {
+	tcs := []struct {
+		name string
+		in   string
+		hash string
+		err  string
+	}{
+		{
+			name: "plaintext",
+			in:   "demo",
+			hash: "demo",
+			err:  "unknown crypto algorithm",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := CheckPass(tc.in, tc.hash)
+
+			if diff := cmp.Diff(err.Error(), tc.err); diff != "" {
+				t.Errorf("unexpected error: \n%s", diff)
 			}
 		})
 	}

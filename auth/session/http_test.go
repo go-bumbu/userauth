@@ -1,18 +1,116 @@
-package sessionauth_test
+package session_test
 
 import (
-	"github.com/davecgh/go-spew/spew"
-	"github.com/go-bumbu/userauth/sessionauth"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"bytes"
+	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/auth/session"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 )
+
+func TestJsonAuthHandler(t *testing.T) {
+
+	tcs := []struct {
+		name     string
+		password string
+		expect   int
+	}{
+		{
+			name:     "valid login",
+			password: "admin",
+			expect:   200,
+		},
+		{
+			name:     "invalid login",
+			password: "nope",
+			expect:   401,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			svr, client := testServer(50*time.Millisecond, 500*time.Millisecond, 5*time.Minute, useFsStore)
+			defer svr.Close()
+
+			// perform login
+			var jsonStr = []byte(`{"user":"admin","password":"` + tc.password + `"}`)
+			request, err := http.NewRequest("POST", svr.URL+"/json-login", bytes.NewBuffer(jsonStr))
+			request.Header.Set("Content-Type", "application/json")
+
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			want := tc.expect
+			if response.StatusCode != want {
+				t.Errorf("[login request] got unexpected response code expected: %d, got: %d", want, response.StatusCode)
+			}
+		})
+	}
+}
+
+func TestFormAuthHandler(t *testing.T) {
+
+	tcs := []struct {
+		name     string
+		password string
+		expect   int
+	}{
+		{
+			name:     "valid login",
+			password: "admin",
+			expect:   200,
+		},
+		{
+			name:     "invalid login",
+			password: "nope",
+			expect:   401,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			svr, client := testServer(50*time.Millisecond, 500*time.Millisecond, 5*time.Minute, useFsStore)
+			defer svr.Close()
+
+			// perform login
+			var param = url.Values{}
+
+			param.Set("user", "admin")
+			param.Set("password", tc.password)
+
+			var payload = bytes.NewBufferString(param.Encode())
+			request, err := http.NewRequest("POST", svr.URL+"/form-login", payload)
+
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			want := tc.expect
+			if response.StatusCode != want {
+				t.Errorf("[login request] got unexpected response code expected: %d, got: %d", want, response.StatusCode)
+			}
+		})
+	}
+}
 
 func TestSessionManagement(t *testing.T) {
 
@@ -51,6 +149,7 @@ func TestSessionManagement(t *testing.T) {
 				}
 			})
 
+			// this tests asserts that we get a 401 after the session is expired
 			t.Run("401 after session expired", func(t *testing.T) {
 				svr, c := testServer(50*time.Millisecond, 500*time.Millisecond, 0, storeType)
 				defer svr.Close()
@@ -78,6 +177,8 @@ func TestSessionManagement(t *testing.T) {
 				}
 			})
 
+			// in this test we make multiple requests that keep the session active
+			// while the overall session expiry is shorter that the total sleep time
 			t.Run("renew session", func(t *testing.T) {
 				svr, c := testServer(50*time.Millisecond, 2000*time.Millisecond, 1*time.Millisecond, storeType)
 				defer svr.Close()
@@ -89,26 +190,25 @@ func TestSessionManagement(t *testing.T) {
 				}
 
 				// sleep a bit and renew the session
-				time.Sleep(40 * time.Millisecond)
-				// assert user is still logged in
-				resp = doReq(c, svr.URL+"/something", t)
-				want = http.StatusOK
-				if resp.StatusCode != want {
-					t.Errorf("[first request] got unexpected response code expected: %d, got: %d", want, resp.StatusCode)
-				}
+				time.Sleep(20 * time.Millisecond)
+				doReq(c, svr.URL+"/something", t)
+				// another request renewing the session
+				time.Sleep(20 * time.Millisecond)
+				doReq(c, svr.URL+"/something", t)
 
 				// sleep another bit and renew the session
-				time.Sleep(40 * time.Millisecond)
+				time.Sleep(20 * time.Millisecond)
 				// assert user is logged in
 				resp = doReq(c, svr.URL+"/something", t)
 				want = http.StatusOK
 				if resp.StatusCode != want {
-					t.Errorf("[second request] got unexpected response code expected: %d, got: %d", want, resp.StatusCode)
+					t.Errorf("[third request] got unexpected response code expected: %d, got: %d", want, resp.StatusCode)
 				}
 			})
 
+			// this test asserts that we get a 401 once we reach the max sess duration even if we keep updating the session
 			t.Run("401 after max session duration", func(t *testing.T) {
-				svr, c := testServer(500*time.Millisecond, 50*time.Millisecond, 0, storeType)
+				svr, c := testServer(50*time.Millisecond, 60*time.Millisecond, 0, storeType)
 				defer svr.Close()
 				// perform login
 				resp := doReq(c, svr.URL+"/login", t)
@@ -117,16 +217,14 @@ func TestSessionManagement(t *testing.T) {
 					t.Errorf("[login request] got unexpected response code expected: %d, got: %d", want, resp.StatusCode)
 				}
 
-				// assert user is logged in
-				resp = doReq(c, svr.URL+"/something", t)
-				want = http.StatusOK
-				if resp.StatusCode != want {
-					t.Errorf("[first request] got unexpected response code expected: %d, got: %d", want, resp.StatusCode)
+				// delay 80ms
+				for i := 0; i < 4; i++ {
+					// sleep a bit and renew the session
+					time.Sleep(20 * time.Millisecond)
+					doReq(c, svr.URL+"/something", t)
 				}
 
-				// sleep longer than the 50ms max session duration
-				time.Sleep(60 * time.Millisecond)
-				// assert user is logged in
+				// assert user gets 401
 				resp = doReq(c, svr.URL+"/something", t)
 				want = http.StatusUnauthorized
 				if resp.StatusCode != want {
@@ -134,6 +232,8 @@ func TestSessionManagement(t *testing.T) {
 				}
 			})
 
+			// this test expects verifies the session write throttling
+			// it expects a 401 even if we keep updating the session > 50ms because the timestamp is never updated.
 			t.Run("401 forced session to not be updated", func(t *testing.T) {
 				svr, c := testServer(50*time.Millisecond, 500*time.Millisecond, 5*time.Minute, storeType)
 				defer svr.Close()
@@ -144,17 +244,15 @@ func TestSessionManagement(t *testing.T) {
 					t.Errorf("[login request] got unexpected response code expected: %d, got: %d", want, resp.StatusCode)
 				}
 
-				// sleep a bit and trigger a session renew, this is not exercised
-				time.Sleep(40 * time.Millisecond)
-				// assert user is still logged in
-				resp = doReq(c, svr.URL+"/something", t)
-				want = http.StatusOK
-				if resp.StatusCode != want {
-					t.Errorf("[first request] got unexpected response code expected: %d, got: %d", want, resp.StatusCode)
-				}
+				// sleep a bit and  trigger a session renew, this is not exercised
+				time.Sleep(20 * time.Millisecond)
+				doReq(c, svr.URL+"/something", t)
+
+				time.Sleep(20 * time.Millisecond)
+				doReq(c, svr.URL+"/something", t)
 
 				// sleep another bit and check that session was not renewed
-				time.Sleep(40 * time.Millisecond)
+				time.Sleep(20 * time.Millisecond)
 				// assert user is logged in
 				resp = doReq(c, svr.URL+"/something", t)
 				want = http.StatusUnauthorized
@@ -167,74 +265,16 @@ func TestSessionManagement(t *testing.T) {
 
 }
 
-func TestProcessSessionData(t *testing.T) {
-
-	tcs := []struct {
-		name string
-		in   sessionauth.SessionData
-		want sessionauth.SessionData
-	}{
-		{
-			name: "session valid",
-			in: sessionauth.SessionData{
-				UserData: sessionauth.UserData{
-					IsAuthenticated: true,
-				},
-				Expiration:  getTime("10m"),
-				ForceReAuth: getTime("1m"),
-			},
-			want: sessionauth.SessionData{UserData: sessionauth.UserData{IsAuthenticated: true}},
-		},
-		{
-			name: "session expired",
-			in: sessionauth.SessionData{UserData: sessionauth.UserData{IsAuthenticated: true},
-				Expiration: getTime("-1s"),
-			},
-			want: sessionauth.SessionData{UserData: sessionauth.UserData{IsAuthenticated: false}},
-		},
-		{
-			name: "session NOT expired, but hard logout",
-			in: sessionauth.SessionData{UserData: sessionauth.UserData{IsAuthenticated: true},
-				Expiration:  getTime("10m"),
-				ForceReAuth: getTime("-1s"),
-			},
-			want: sessionauth.SessionData{UserData: sessionauth.UserData{IsAuthenticated: false}},
-		},
-	}
-
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-
-			got := tc.in
-			got.Process(0)
-			want := tc.want
-			if diff := cmp.Diff(want, got, cmpopts.IgnoreFields(sessionauth.SessionData{}, "Expiration", "ForceReAuth")); diff != "" {
-				t.Errorf("Content mismatch (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func doReq(client *http.Client, url string, t *testing.T) *http.Response {
-	req, _ := http.NewRequest(http.MethodGet, url, nil)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return resp
-}
-
 // test server  ------------------------------------------------------------
 const useFsStore = "fs"
 
 func testServer(SessionDur, MaxSessionDur, update time.Duration, storeType string) (*httptest.Server, *http.Client) {
 	var store sessions.Store
 	if storeType == useFsStore {
-		store, _ = sessionauth.NewFsStore("", securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
+		store, _ = session.NewFsStore("", securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
 	}
 
-	authSess, err := sessionauth.NewAuthMngr(sessionauth.Cfg{
+	authSess, err := session.New(session.Cfg{
 		Store:         store,
 		SessionDur:    SessionDur,
 		MaxSessionDur: MaxSessionDur,
@@ -242,22 +282,24 @@ func testServer(SessionDur, MaxSessionDur, update time.Duration, storeType strin
 	})
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		if r.RequestURI == "/login" {
-			err = authSess.Login(r, w, "tester")
+			err = authSess.LoginUser(r, w, "tester")
 			if err != nil {
-				spew.Dump(err)
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}
 			http.Error(w, "ok", http.StatusOK)
 		} else if r.RequestURI == "/form-login" {
-			user := dummyUser{}
-			handler := sessionauth.FormAuthHandler(authSess, user)
+			auth := userauth.LoginHandler{
+				UserStore: dummyUser{},
+			}
+			handler := session.FormAuthHandler(authSess, auth)
 			handler.ServeHTTP(w, r)
 		} else if r.RequestURI == "/json-login" {
-			user := dummyUser{}
-			handler := sessionauth.JsonAuthHandler(authSess, user)
+			auth := userauth.LoginHandler{
+				UserStore: dummyUser{},
+			}
+			handler := session.JsonAuthHandler(authSess, auth)
 			handler.ServeHTTP(w, r)
 		} else {
 			h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -287,24 +329,4 @@ func getTime(add string) time.Time {
 	}
 
 	return time.Now().Add(dur)
-}
-
-// dummyUser  ------------------------------------------------------------
-
-type dummyUser struct {
-	user string
-	pass string
-}
-
-func (st dummyUser) AllowLogin(user string, hash string) bool {
-	if st.user == "" {
-		st.user = "admin"
-	}
-	if st.pass == "" {
-		st.pass = "admin"
-	}
-	if user == st.user && hash == st.pass {
-		return true
-	}
-	return false
 }

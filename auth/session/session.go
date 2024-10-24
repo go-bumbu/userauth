@@ -1,4 +1,4 @@
-package sessionauth
+package session
 
 import (
 	"encoding/gob"
@@ -27,7 +27,7 @@ type Cfg struct {
 	MinWriteSpace time.Duration
 }
 
-type AuthMngr struct {
+type SessionMngr struct {
 	store sessions.Store
 
 	sessionDur    time.Duration
@@ -35,7 +35,7 @@ type AuthMngr struct {
 	maxSessionDur time.Duration
 }
 
-func NewAuthMngr(cfg Cfg) (*AuthMngr, error) {
+func New(cfg Cfg) (*SessionMngr, error) {
 
 	if cfg.SessionDur == 0 {
 		cfg.SessionDur = time.Hour * 1
@@ -50,7 +50,7 @@ func NewAuthMngr(cfg Cfg) (*AuthMngr, error) {
 		return nil, fmt.Errorf("session store cannot be nil")
 	}
 
-	c := AuthMngr{
+	c := SessionMngr{
 		sessionDur:    cfg.SessionDur,
 		minWriteSpace: cfg.MinWriteSpace,
 		maxSessionDur: cfg.MaxSessionDur,
@@ -64,57 +64,79 @@ const (
 	sessionDataKey = "data"
 )
 
-// Login is a convenience function to write a new logged-in session for a specific user id and write it
-func (auth *AuthMngr) Login(r *http.Request, w http.ResponseWriter, user string) error {
+// LoginUser will store the user as logged-in in the session store
+// it is not explicitly needed to verify the authentication, but used in handlers that log in a user
+// and initiate a session, e.g. see JsonAuthHandler
+func (sMngr *SessionMngr) LoginUser(r *http.Request, w http.ResponseWriter, userId string) error {
 	authData := SessionData{
 		UserData: UserData{
-			UserId:          user,
+			UserId:          userId,
 			IsAuthenticated: true,
 		},
-		Expiration:  time.Now().Add(auth.sessionDur),
-		ForceReAuth: time.Now().Add(auth.maxSessionDur),
+		Expiration:  time.Now().Add(sMngr.sessionDur),
+		ForceReAuth: time.Now().Add(sMngr.maxSessionDur),
 	}
-	session, err := auth.store.Get(r, SessionName)
+	session, err := sMngr.store.Get(r, SessionName)
 	if err != nil {
 		return err
 	}
-	return auth.write(r, w, session, authData)
+	return sMngr.write(r, w, session, authData)
 }
 
-// Logout is a convenience function to logout the current user
-func (auth *AuthMngr) Logout(r *http.Request, w http.ResponseWriter) error {
+// LogoutUser is a convenience function to logout the current user based on the session information
+// it is not explicitly needed to verify the authentication, but used in handlers that logout a user
+func (sMngr *SessionMngr) LogoutUser(r *http.Request, w http.ResponseWriter) error {
 	authData := SessionData{
 		UserData: UserData{
 			IsAuthenticated: false,
 		},
 	}
-	session, err := auth.store.Get(r, SessionName)
+	session, err := sMngr.store.Get(r, SessionName)
 	if err != nil {
 		return err
 	}
-	return auth.write(r, w, session, authData)
+	return sMngr.write(r, w, session, authData)
 }
 
-// the Write public function is commented out for now, until it might be needed to not blow the API
-// Use Login() instead
-//func (auth *AuthMngr) Write(r *http.Request, w http.ResponseWriter, data SessionData) ( error) {
-//	session, err := auth.store.Get(r, SessionName)
-//	if err != nil {
-//		return err
-//	}
-//	return auth.write(r, w, session, data)
-//}
+// ReadUpdate is used to read the session, and update the session expiry timestamp
+// it only extends the session if enough time has passed since the last write to not overload
+// the session store on many requests.
+// it returns the session data if the user is logged in
+func (sMngr *SessionMngr) ReadUpdate(r *http.Request, w http.ResponseWriter) (SessionData, error) {
+	data, session, err := sMngr.read(r)
+	if err != nil {
+		return SessionData{}, err
+	}
 
-// write is responsible for writing the login session data into the backend session
-// it implements a throttling mechanism ...
-// TODO e.g. logout will not work with throtling,
-func (auth *AuthMngr) write(r *http.Request, w http.ResponseWriter, session *sessions.Session, data SessionData) error {
+	if data.IsAuthenticated {
+		err = sMngr.write(r, w, session, data)
+		if err != nil {
+			return SessionData{}, err
+		}
+		return data, nil
+	}
+	return SessionData{}, nil
+}
+
+// UpdateExpiry will write into the session updating the expiry time of the session
+// this method contains a throttling mechanism in order to only write session updates after a certain period of time
+// to avoid overloading the sessions store
+func (sMngr *SessionMngr) UpdateExpiry(r *http.Request, w http.ResponseWriter) error {
+	data, session, err := sMngr.read(r)
+	if err != nil {
+		return err
+	}
 	now := time.Now()
-	if data.LastUpdate.Add(auth.minWriteSpace).After(now) {
+	if data.LastUpdate.Add(sMngr.minWriteSpace).After(now) {
 		return nil
 	}
-	data.LastUpdate = now
+	return sMngr.write(r, w, session, data)
+}
 
+// write is responsible for writing the login session data into the backend session
+// write is kept intentionally private for now.
+func (sMngr *SessionMngr) write(r *http.Request, w http.ResponseWriter, session *sessions.Session, data SessionData) error {
+	data.LastUpdate = time.Now()
 	session.Values[sessionDataKey] = data
 	err := session.Save(r, w)
 	if err != nil {
@@ -123,12 +145,13 @@ func (auth *AuthMngr) write(r *http.Request, w http.ResponseWriter, session *ses
 	return nil
 }
 
-func (auth *AuthMngr) Read(r *http.Request) (SessionData, error) {
-	data, _, err := auth.read(r)
+func (sMngr *SessionMngr) Read(r *http.Request) (SessionData, error) {
+	data, _, err := sMngr.read(r)
 	return data, err
 }
-func (auth *AuthMngr) read(r *http.Request) (SessionData, *sessions.Session, error) {
-	session, err := auth.store.Get(r, SessionName)
+
+func (sMngr *SessionMngr) read(r *http.Request) (SessionData, *sessions.Session, error) {
+	session, err := sMngr.store.Get(r, SessionName)
 	if err != nil {
 		// TODO find better solution to handle sessions when the FS store is gone but the client still has a session
 		return SessionData{}, nil, err
@@ -139,28 +162,8 @@ func (auth *AuthMngr) read(r *http.Request) (SessionData, *sessions.Session, err
 		return SessionData{}, nil, err
 	}
 	authData := key.(SessionData)
-	authData.Process(auth.sessionDur)
+	authData.Process(sMngr.sessionDur)
 	return authData, session, err
-}
-
-// ReadUpdate is used to read the session, and update the session expiry timestamp
-// it only extends the session if enough time has passed since the last write to not overload
-// the session store on many requests.
-// it returns the session data if the user is logged in
-func (auth *AuthMngr) ReadUpdate(r *http.Request, w http.ResponseWriter) (SessionData, error) {
-	data, session, err := auth.read(r)
-	if err != nil {
-		return SessionData{}, err
-	}
-
-	if data.IsAuthenticated {
-		err = auth.write(r, w, session, data)
-		if err != nil {
-			return SessionData{}, err
-		}
-		return data, nil
-	}
-	return SessionData{}, nil
 }
 
 // Session Data  ------------------------------------------------------------

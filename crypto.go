@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"slices"
@@ -13,13 +14,19 @@ import (
 const SHA1Prefix = "{SHA}"
 
 // CheckPass compares a provided transient password (that is never stored) with the stored counterpart hash
-
 func CheckPass(plainPass, hash string) (bool, error) {
 	switch Alg(hash) {
 	case Sha1:
 		return checkSha1Pw(plainPass, hash)
 	case Bcrypt:
-		return checkBcryptPw(plainPass, hash)
+		ok, err := checkBcryptPw(plainPass, hash)
+		if err != nil {
+			if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+				return false, nil
+			}
+			return false, err
+		}
+		return ok, nil
 	default:
 		return false, fmt.Errorf("unknown crypto algorithm")
 	}
@@ -67,11 +74,12 @@ func Alg(hash string) HashAlgo {
 	return Unknown
 }
 
+// HashPw creates a hash encrypted password of the provided string
 func HashPw(pw string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
 	return string(bytes), err
 }
-func MustHash(pw string) string {
+func MustHashPw(pw string) string {
 	hash, err := HashPw(pw)
 	if err != nil {
 		panic(err)

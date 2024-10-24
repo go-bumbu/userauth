@@ -1,9 +1,10 @@
 package userauth_test
 
 import (
+	"errors"
 	"fmt"
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/staticusers"
+	"github.com/go-bumbu/userauth/userstore/staticusers"
 )
 
 func ExampleStaticUsers() {
@@ -12,12 +13,12 @@ func ExampleStaticUsers() {
 	u := []staticusers.User{
 		{
 			Id:      "demo",
-			HashPw:  userauth.MustHash("demo"),
+			HashPw:  userauth.MustHashPw("demo"),
 			Enabled: false,
 		},
 		{
 			Id:      "admin",
-			HashPw:  userauth.MustHash("admin"),
+			HashPw:  userauth.MustHashPw("admin"),
 			Enabled: true,
 		},
 	}
@@ -32,13 +33,17 @@ func ExampleStaticUsers() {
 	}
 
 	// check if the user demo (from file) can log in
-	isOK, err := loginHandler.AllowLogin("admin", "admin")
-	panicOnErr(err)
+	isOK, _ := loginHandler.CanLogin("admin", "admin")
 	fmt.Printf("user admin can login: %v\n", isOK)
 
 	// check if the user demo can't log in since the account is disabled
-	isOK, err = loginHandler.AllowLogin("demo", "demo")
-	panicOnErr(err)
+	isOK, err := loginHandler.CanLogin("demo", "demo")
+	switch {
+	case errors.Is(err, userauth.NotFoundErr), errors.Is(err, userauth.UserDisabledErr):
+		// expected errors
+	default:
+		panicOnErr(err)
+	}
 	fmt.Printf("user demo can login: %v", isOK)
 
 	// Output:

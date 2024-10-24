@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/go-bumbu/userauth/basicauth"
+	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/auth/basicauth"
 )
 
 // nolint: govet
@@ -13,9 +14,11 @@ func ExampleBasicAuth() {
 	protectedSite := dummyHandler()
 	// create an instance of basic auth
 	basicAuth := basicauth.Basic{
-		User: dummyUser{ // pass a UserLogin
-			user: "demo",
-			pass: "demo",
+		User: userauth.LoginHandler{
+			UserStore: dummyUser{
+				user: "demo",
+				pass: userauth.MustHashPw("demo"),
+			},
 		},
 	}
 	// use the middleware to protect the page

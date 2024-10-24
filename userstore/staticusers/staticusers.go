@@ -36,25 +36,8 @@ func (stu *Users) GetUser(userId string) (userauth.User, error) {
 			}, nil
 		}
 	}
-	return userauth.User{}, userauth.NotFoundErr{}
+	return userauth.User{}, userauth.NotFoundErr
 }
-
-// TODO remove
-//func (stu *Users) CanLogin(user string, plainPw string) bool {
-//	for _, u := range stu.Users {
-//		if user == u.Id {
-//			if !u.Enabled {
-//				return false
-//			}
-//			access, err := userauth.CheckPass(plainPw, u.HashPw)
-//			if err != nil {
-//				return false
-//			}
-//			return access
-//		}
-//	}
-//	return false
-//}
 
 // FromFile loads a file containing user information and returns static user
 // possible files are json, yaml and htpasswd

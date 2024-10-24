@@ -6,7 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-bumbu/userauth/basicauth"
+	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/auth/basicauth"
 )
 
 type dummyUser struct {
@@ -14,17 +15,18 @@ type dummyUser struct {
 	pass string
 }
 
-func (st dummyUser) CanLogin(user string, hash string) bool {
+func (st dummyUser) GetUser(id string) (userauth.User, error) {
 	if st.user == "" {
 		st.user = "admin"
 	}
 	if st.pass == "" {
-		st.pass = "admin"
+		st.pass = userauth.MustHashPw("admin")
 	}
-	if user == st.user && hash == st.pass {
-		return true
-	}
-	return false
+	return userauth.User{
+		Id:      st.user,
+		HashPw:  st.pass,
+		Enabled: true,
+	}, nil
 }
 
 func dummyHandler() http.Handler {
@@ -71,7 +73,9 @@ func TestBasicAuthResponseCode(t *testing.T) {
 
 	dummy := dummyHandler()
 	basicAuth := basicauth.Basic{
-		User: dummyUser{},
+		User: userauth.LoginHandler{
+			UserStore: dummyUser{},
+		},
 	}
 	handler := basicAuth.Middleware(dummy)
 
