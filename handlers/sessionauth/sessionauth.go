@@ -1,4 +1,4 @@
-package session
+package sessionauth
 
 import (
 	"encoding/gob"
@@ -27,7 +27,7 @@ type Cfg struct {
 	MinWriteSpace time.Duration
 }
 
-type SessionMngr struct {
+type Manager struct {
 	store sessions.Store
 
 	sessionDur    time.Duration
@@ -35,7 +35,7 @@ type SessionMngr struct {
 	maxSessionDur time.Duration
 }
 
-func New(cfg Cfg) (*SessionMngr, error) {
+func New(cfg Cfg) (*Manager, error) {
 
 	if cfg.SessionDur == 0 {
 		cfg.SessionDur = time.Hour * 1
@@ -50,7 +50,7 @@ func New(cfg Cfg) (*SessionMngr, error) {
 		return nil, fmt.Errorf("session store cannot be nil")
 	}
 
-	c := SessionMngr{
+	c := Manager{
 		sessionDur:    cfg.SessionDur,
 		minWriteSpace: cfg.MinWriteSpace,
 		maxSessionDur: cfg.MaxSessionDur,
@@ -67,7 +67,7 @@ const (
 // LoginUser will store the user as logged-in in the session store
 // it is not explicitly needed to verify the authentication, but used in handlers that log in a user
 // and initiate a session, e.g. see JsonAuthHandler
-func (sMngr *SessionMngr) LoginUser(r *http.Request, w http.ResponseWriter, userId string) error {
+func (sMngr *Manager) LoginUser(r *http.Request, w http.ResponseWriter, userId string) error {
 	authData := SessionData{
 		UserData: UserData{
 			UserId:          userId,
@@ -85,7 +85,7 @@ func (sMngr *SessionMngr) LoginUser(r *http.Request, w http.ResponseWriter, user
 
 // LogoutUser is a convenience function to logout the current user based on the session information
 // it is not explicitly needed to verify the authentication, but used in handlers that logout a user
-func (sMngr *SessionMngr) LogoutUser(r *http.Request, w http.ResponseWriter) error {
+func (sMngr *Manager) LogoutUser(r *http.Request, w http.ResponseWriter) error {
 	authData := SessionData{
 		UserData: UserData{
 			IsAuthenticated: false,
@@ -102,7 +102,7 @@ func (sMngr *SessionMngr) LogoutUser(r *http.Request, w http.ResponseWriter) err
 // it only extends the session if enough time has passed since the last write to not overload
 // the session store on many requests.
 // it returns the session data if the user is logged in
-func (sMngr *SessionMngr) ReadUpdate(r *http.Request, w http.ResponseWriter) (SessionData, error) {
+func (sMngr *Manager) ReadUpdate(r *http.Request, w http.ResponseWriter) (SessionData, error) {
 	data, session, err := sMngr.read(r)
 	if err != nil {
 		return SessionData{}, err
@@ -121,7 +121,7 @@ func (sMngr *SessionMngr) ReadUpdate(r *http.Request, w http.ResponseWriter) (Se
 // UpdateExpiry will write into the session updating the expiry time of the session
 // this method contains a throttling mechanism in order to only write session updates after a certain period of time
 // to avoid overloading the sessions store
-func (sMngr *SessionMngr) UpdateExpiry(r *http.Request, w http.ResponseWriter) error {
+func (sMngr *Manager) UpdateExpiry(r *http.Request, w http.ResponseWriter) error {
 	data, session, err := sMngr.read(r)
 	if err != nil {
 		return err
@@ -135,7 +135,7 @@ func (sMngr *SessionMngr) UpdateExpiry(r *http.Request, w http.ResponseWriter) e
 
 // write is responsible for writing the login session data into the backend session
 // write is kept intentionally private for now.
-func (sMngr *SessionMngr) write(r *http.Request, w http.ResponseWriter, session *sessions.Session, data SessionData) error {
+func (sMngr *Manager) write(r *http.Request, w http.ResponseWriter, session *sessions.Session, data SessionData) error {
 	data.LastUpdate = time.Now()
 	session.Values[sessionDataKey] = data
 	err := session.Save(r, w)
@@ -145,12 +145,12 @@ func (sMngr *SessionMngr) write(r *http.Request, w http.ResponseWriter, session 
 	return nil
 }
 
-func (sMngr *SessionMngr) Read(r *http.Request) (SessionData, error) {
+func (sMngr *Manager) Read(r *http.Request) (SessionData, error) {
 	data, _, err := sMngr.read(r)
 	return data, err
 }
 
-func (sMngr *SessionMngr) read(r *http.Request) (SessionData, *sessions.Session, error) {
+func (sMngr *Manager) read(r *http.Request) (SessionData, *sessions.Session, error) {
 	session, err := sMngr.store.Get(r, SessionName)
 	if err != nil {
 		// TODO find better solution to handle sessions when the FS store is gone but the client still has a session
@@ -166,10 +166,10 @@ func (sMngr *SessionMngr) read(r *http.Request) (SessionData, *sessions.Session,
 	return authData, session, err
 }
 
-// Session Data  ------------------------------------------------------------
+// Session Value  ------------------------------------------------------------
 
 type UserData struct {
-	UserId          string // ID or username
+	UserId          string // Key or username
 	DeviceID        string // hold information about the device
 	IsAuthenticated bool
 }

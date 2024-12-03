@@ -1,5 +1,14 @@
 ## Braindump of todos
 
+* create an pluggable authenticator that allows to configure multiple auth mechanisms, e.g. session and api token
+
+### session handler
+* session http to implement login/logout handlers
+* session admin should allow extra features
+  * 
+
+
+
 ### Authentication
 * user login
 * enable/disable user

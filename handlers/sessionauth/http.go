@@ -1,4 +1,4 @@
-package session
+package sessionauth
 
 import (
 	"context"
@@ -9,11 +9,11 @@ import (
 	"net/http"
 )
 
-// SessionMngr middleware ------------------------------------------------------------
+// Manager middleware ------------------------------------------------------------
 
 // Middleware is a simple session auth middleware that will only allow access if the user is logged in
 // this can be used as simple implementations or as inspiration to customize an authentication middleware
-func (sMngr *SessionMngr) Middleware(next http.Handler) http.Handler {
+func (sMngr *Manager) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data, err := sMngr.Read(r)
 		if err != nil {
@@ -37,7 +37,7 @@ func (sMngr *SessionMngr) Middleware(next http.Handler) http.Handler {
 
 // FormAuthHandler is a simple session auth handler that will respond to a form POST request and login a user
 // this can be used as simple implementations or as inspiration to customize an authentication middleware
-func FormAuthHandler(sMngr *SessionMngr, auth userauth.LoginHandler) http.Handler {
+func FormAuthHandler(sMngr *Manager, auth userauth.LoginHandler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := r.ParseForm()
 		if err != nil {
@@ -87,7 +87,7 @@ type loginData struct {
 
 // JsonAuthHandler is a simple session auth handler that will respond to a Json POST request and login a user
 // this can be used as simple implementations or as inspiration to customize an authentication middleware
-func JsonAuthHandler(sMngr *SessionMngr, auth userauth.LoginHandler) http.Handler {
+func JsonAuthHandler(sMngr *Manager, auth userauth.LoginHandler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload loginData
 

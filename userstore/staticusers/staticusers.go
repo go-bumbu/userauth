@@ -11,7 +11,7 @@ import (
 )
 
 // ensure the interface is fulfilled
-var _ userauth.UserStore = &Users{}
+var _ userauth.UserGetter = &Users{}
 
 type User struct {
 	Id      string `yaml:"id" json:"id"`           // user Identifying string: e.g. name or email
@@ -37,6 +37,10 @@ func (stu *Users) GetUser(userId string) (userauth.User, error) {
 		}
 	}
 	return userauth.User{}, userauth.NotFoundErr
+}
+
+func (stu *Users) Add(user User) {
+	stu.Users = append(stu.Users, user)
 }
 
 // FromFile loads a file containing user information and returns static user

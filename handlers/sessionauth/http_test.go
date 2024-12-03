@@ -1,9 +1,8 @@
-package session_test
+package sessionauth_test
 
 import (
 	"bytes"
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/auth/session"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	"net/http"
@@ -271,10 +270,10 @@ const useFsStore = "fs"
 func testServer(SessionDur, MaxSessionDur, update time.Duration, storeType string) (*httptest.Server, *http.Client) {
 	var store sessions.Store
 	if storeType == useFsStore {
-		store, _ = session.NewFsStore("", securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
+		store, _ = sessionauth.NewFsStore("", securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
 	}
 
-	authSess, err := session.New(session.Cfg{
+	authSess, err := sessionauth.New(sessionauth.Cfg{
 		Store:         store,
 		SessionDur:    SessionDur,
 		MaxSessionDur: MaxSessionDur,
@@ -293,13 +292,13 @@ func testServer(SessionDur, MaxSessionDur, update time.Duration, storeType strin
 			auth := userauth.LoginHandler{
 				UserStore: dummyUser{},
 			}
-			handler := session.FormAuthHandler(authSess, auth)
+			handler := sessionauth.FormAuthHandler(authSess, auth)
 			handler.ServeHTTP(w, r)
 		} else if r.RequestURI == "/json-login" {
 			auth := userauth.LoginHandler{
 				UserStore: dummyUser{},
 			}
-			handler := session.JsonAuthHandler(authSess, auth)
+			handler := sessionauth.JsonAuthHandler(authSess, auth)
 			handler.ServeHTTP(w, r)
 		} else {
 			h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

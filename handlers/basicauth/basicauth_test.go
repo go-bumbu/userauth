@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/auth/basicauth"
+	"github.com/go-bumbu/userauth/handlers/basicauth"
 )
 
 type dummyUser struct {
@@ -72,11 +72,11 @@ func TestBasicAuthResponseCode(t *testing.T) {
 	}
 
 	dummy := dummyHandler()
-	basicAuth := basicauth.Basic{
-		User: userauth.LoginHandler{
-			UserStore: dummyUser{},
-		},
-	}
+
+	basicAuth := basicauth.NewHandler(userauth.LoginHandler{
+		UserStore: dummyUser{},
+	}, "", true, nil)
+
 	handler := basicAuth.Middleware(dummy)
 
 	for _, tc := range tcs {
