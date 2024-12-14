@@ -1,8 +1,10 @@
 package authenticator
 
 import (
+	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 )
 
 type AuthHandler interface {
@@ -10,27 +12,44 @@ type AuthHandler interface {
 	HandleAuth(w http.ResponseWriter, r *http.Request) (loggedIn, stopEvaluation bool)
 }
 
+type callback func(w http.ResponseWriter, r *http.Request)
+
 type Authenticator struct {
 	handlers             []AuthHandler
 	Logger               *slog.Logger
-	UnauthorizedCallback func(w http.ResponseWriter, r *http.Request)
+	unauthorizedCallback callback
+	authorizedCallback   callback
 }
 
-func New() *Authenticator {
+func New(handlers []AuthHandler, l *slog.Logger, unAuthCallback, authCallback callback) *Authenticator {
+	logger := l
+	if logger == nil {
+		logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
+	}
+
+	n := []string{}
+	for _, h := range handlers {
+		n = append(n, h.Name())
+	}
+	logger.Info("configuring authenticator", slog.String("handlers", strings.Join(n, ",")))
+
 	a := Authenticator{
-		handlers: []AuthHandler{},
-		Logger:   nil,
+		handlers:             handlers,
+		Logger:               logger,
+		unauthorizedCallback: unAuthCallback,
+		authorizedCallback:   authCallback,
 	}
 	return &a
 }
 
-func (a *Authenticator) Add(h AuthHandler) {
-	a.handlers = append(a.handlers, h)
-}
+func (a *Authenticator) EvalAuth(w http.ResponseWriter, r *http.Request) bool {
 
-func (a *Authenticator) Evaluate(w http.ResponseWriter, r *http.Request) bool {
 	for _, authHandler := range a.handlers {
+		a.Logger.Debug("evaluating auth handler", slog.String("name", authHandler.Name()))
 		ok, breakEval := authHandler.HandleAuth(w, r)
+		a.Logger.Debug("auth handler result", slog.String("name", authHandler.Name()),
+			slog.Bool("isAuthenticated", ok), slog.Bool("breakEvaluation", breakEval),
+		)
 		if ok {
 			return true
 		}
@@ -43,13 +62,20 @@ func (a *Authenticator) Evaluate(w http.ResponseWriter, r *http.Request) bool {
 
 func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if a.Evaluate(w, r) {
+		if a.EvalAuth(w, r) {
 			next.ServeHTTP(w, r)
+
+			if a.authorizedCallback != nil {
+				a.authorizedCallback(w, r)
+				return
+			}
+		} else {
+			if a.unauthorizedCallback != nil {
+				a.unauthorizedCallback(w, r)
+				return
+			}
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		}
-		if a.UnauthorizedCallback != nil {
-			a.UnauthorizedCallback(w, r)
-			return
-		}
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+
 	})
 }

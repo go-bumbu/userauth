@@ -2,7 +2,9 @@ package sessionauth
 
 import (
 	"encoding/gob"
+	"errors"
 	"fmt"
+	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	"net/http"
 	"time"
@@ -76,15 +78,36 @@ func (sMngr *Manager) LoginUser(r *http.Request, w http.ResponseWriter, userId s
 		Expiration:  time.Now().Add(sMngr.sessionDur),
 		ForceReAuth: time.Now().Add(sMngr.maxSessionDur),
 	}
-	session, err := sMngr.store.Get(r, SessionName)
+	//session, err := sMngr.store.Get(r, SessionName)
+	session, err := sMngr.Get(r, SessionName)
 	if err != nil {
 		return err
 	}
 	return sMngr.write(r, w, session, authData)
 }
 
-// LogoutUser is a convenience function to logout the current user based on the session information
-// it is not explicitly needed to verify the authentication, but used in handlers that logout a user
+// Get is a wrapper around session get that will ignore the
+func (sMngr *Manager) Get(r *http.Request, name string) (*sessions.Session, error) {
+	session, err := sMngr.store.Get(r, name)
+	if err != nil {
+		var multiErr securecookie.MultiError
+		if errors.As(err, &multiErr) {
+			for _, singleErr := range multiErr {
+				if singleErr.Error() == "securecookie: the value is not valid" {
+					return session, nil
+
+					// ignoring existing cookie, e.g. because we generated new key pairs
+					//return SessionData{}, nil, nil
+				}
+			}
+		}
+		return nil, err
+	}
+	return session, nil
+}
+
+// LogoutUser is a convenience function to log out the current user based on the session information
+// note that if the same user has multiple sessions this will not log out the other sessions
 func (sMngr *Manager) LogoutUser(r *http.Request, w http.ResponseWriter) error {
 	authData := SessionData{
 		UserData: UserData{
@@ -98,34 +121,38 @@ func (sMngr *Manager) LogoutUser(r *http.Request, w http.ResponseWriter) error {
 	return sMngr.write(r, w, session, authData)
 }
 
-// ReadUpdate is used to read the session, and update the session expiry timestamp
-// it only extends the session if enough time has passed since the last write to not overload
-// the session store on many requests.
-// it returns the session data if the user is logged in
-func (sMngr *Manager) ReadUpdate(r *http.Request, w http.ResponseWriter) (SessionData, error) {
-	data, session, err := sMngr.read(r)
-	if err != nil {
-		return SessionData{}, err
-	}
+//// ReadUpdate is used to read the session, and update the session expiry timestamp
+//// it only extends the session if enough time has passed since the last write to not overload
+//// the session store on many requests.
+//// it returns the session data if the user is logged in
+//func (sMngr *Manager) ReadUpdate(r *http.Request, w http.ResponseWriter) (SessionData, error) {
+//	data, session, err := sMngr.read(r)
+//	if err != nil {
+//		return SessionData{}, err
+//	}
+//
+//	if data.IsAuthenticated {
+//		err = sMngr.write(r, w, session, data)
+//		if err != nil {
+//			return SessionData{}, err
+//		}
+//		return data, nil
+//	}
+//	return SessionData{}, nil
+//}
 
-	if data.IsAuthenticated {
-		err = sMngr.write(r, w, session, data)
-		if err != nil {
-			return SessionData{}, err
-		}
-		return data, nil
-	}
-	return SessionData{}, nil
-}
+//// UpdateExpiry will write into the session updating the expiry time of the session
+//// this method contains a throttling mechanism in order to only write session updates after a certain period of time
+//// to avoid overloading the sessions store
+//func (sMngr *Manager) UpdateExpiry(r *http.Request, w http.ResponseWriter) error {
+//	data, session, err := sMngr.read(r)
+//	if err != nil {
+//		return err
+//	}
+//	return sMngr.updateExpiry(data, session, r, w)
+//}
 
-// UpdateExpiry will write into the session updating the expiry time of the session
-// this method contains a throttling mechanism in order to only write session updates after a certain period of time
-// to avoid overloading the sessions store
-func (sMngr *Manager) UpdateExpiry(r *http.Request, w http.ResponseWriter) error {
-	data, session, err := sMngr.read(r)
-	if err != nil {
-		return err
-	}
+func (sMngr *Manager) updateExpiry(data SessionData, session *sessions.Session, r *http.Request, w http.ResponseWriter) error {
 	now := time.Now()
 	if data.LastUpdate.Add(sMngr.minWriteSpace).After(now) {
 		return nil
@@ -145,15 +172,32 @@ func (sMngr *Manager) write(r *http.Request, w http.ResponseWriter, session *ses
 	return nil
 }
 
+// Read gets the user information out of the session store
 func (sMngr *Manager) Read(r *http.Request) (SessionData, error) {
 	data, _, err := sMngr.read(r)
 	return data, err
 }
 
 func (sMngr *Manager) read(r *http.Request) (SessionData, *sessions.Session, error) {
-	session, err := sMngr.store.Get(r, SessionName)
+	session, err := sMngr.Get(r, SessionName)
 	if err != nil {
-		// TODO find better solution to handle sessions when the FS store is gone but the client still has a session
+		fmt.Println("handle")
+		var multiErr securecookie.MultiError
+		if errors.As(err, &multiErr) {
+			for _, singleErr := range multiErr {
+				if singleErr.Error() == "securecookie: the value is not valid" {
+
+					fmt.Println("handle")
+
+					//session.Values[sessionDataKey] = nil
+					//session.Save(r)
+
+					// ignoring existing cookie, e.g. because we generated new key pairs
+					//return SessionData{}, nil, nil
+				}
+			}
+		}
+		fmt.Println("return")
 		return SessionData{}, nil, err
 	}
 

@@ -2,6 +2,7 @@ package sessionauth_test
 
 import (
 	"fmt"
+	"github.com/go-bumbu/userauth/handlers/sessionauth"
 	"github.com/gorilla/securecookie"
 	"net/http"
 	"net/http/httptest"

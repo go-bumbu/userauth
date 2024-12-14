@@ -9,6 +9,7 @@ type User struct {
 	Id      string // user Identifying string: e.g. name or email
 	HashPw  string // hashed passwd in one of the supported algorithms
 	Enabled bool   // flag if user is enabled
+	//MinLoginTime time.Time // can be set to a time, where all tokens/sessions created before this time are invalid
 }
 
 type UserGetter interface {

@@ -3,6 +3,7 @@ package sessionauth_test
 import (
 	"bytes"
 	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/handlers/sessionauth"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	"net/http"
@@ -231,7 +232,7 @@ func TestSessionManagement(t *testing.T) {
 				}
 			})
 
-			// this test expects verifies the session write throttling
+			// this test verifies the session write throttling
 			// it expects a 401 even if we keep updating the session > 50ms because the timestamp is never updated.
 			t.Run("401 forced session to not be updated", func(t *testing.T) {
 				svr, c := testServer(50*time.Millisecond, 500*time.Millisecond, 5*time.Minute, storeType)

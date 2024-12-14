@@ -89,11 +89,11 @@ func (auth *AuthHandler) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		canLogin, _, username := auth.handleAuth(w, r)
 		if canLogin {
-			auth.logger.Info("login successful", "username", username)
+			auth.logger.Debug("login successful", "username", username)
 			next.ServeHTTP(w, r)
 			return
 		} else {
-			auth.logger.Info("login unsuccessful", "username", username)
+			auth.logger.Debug("login unsuccessful", "username", username)
 		}
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})

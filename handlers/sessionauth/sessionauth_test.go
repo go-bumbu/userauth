@@ -3,6 +3,7 @@ package sessionauth_test
 import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/handlers/sessionauth"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"net/http"

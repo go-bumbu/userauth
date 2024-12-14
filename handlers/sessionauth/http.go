@@ -9,24 +9,44 @@ import (
 	"net/http"
 )
 
-// Manager middleware ------------------------------------------------------------
+const SessionMngrName = "sessionAuth"
+
+func (sMngr *Manager) Name() string {
+	return SessionMngrName
+}
+
+// HandleAuth implements the authenticator.AuthHandler interface to allow to use session based in the authenticator
+func (sMngr *Manager) HandleAuth(w http.ResponseWriter, r *http.Request) (loggedIn, stopEvaluation bool) {
+	stopEvaluation = false
+	loggedIn = false
+
+	data, session, err := sMngr.read(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if data.IsAuthenticated {
+		loggedIn = true
+		CtxSetUserData(r, data)
+		err = sMngr.updateExpiry(data, session, r, w)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		return
+	}
+	return
+}
+
+// middleware ------------------------------------------------------------
 
 // Middleware is a simple session auth middleware that will only allow access if the user is logged in
 // this can be used as simple implementations or as inspiration to customize an authentication middleware
 func (sMngr *Manager) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data, err := sMngr.Read(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		if data.IsAuthenticated {
-			CtxSetUserData(r, data)
+		canLogin, _ := sMngr.HandleAuth(w, r)
+		if canLogin {
 			next.ServeHTTP(w, r)
-
-			err = sMngr.UpdateExpiry(r, w)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
 			return
 		}
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
