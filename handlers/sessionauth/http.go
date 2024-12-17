@@ -132,7 +132,7 @@ func (sMngr *Manager) FormAuthHandler(auth userauth.LoginHandler, redirect strin
 // Json POST basd auth handler  ------------------------------------------------------------
 
 type loginData struct {
-	User           string `json:"user"`
+	User           string `json:"username"`
 	Pw             string `json:"password"`
 	KeepMeLoggedIn bool   `json:"sessionRenew"`
 	Redirect       string
@@ -147,6 +147,11 @@ func (sMngr *Manager) JsonAuthHandler(auth userauth.LoginHandler) http.Handler {
 		err := json.NewDecoder(r.Body).Decode(&payload)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if payload.User == "" || payload.Pw == "" {
+			http.Error(w, "User or Password cannot be empty", http.StatusBadRequest)
 			return
 		}
 

@@ -49,7 +49,7 @@ func TestJsonAuthHandler(t *testing.T) {
 					defer svr.Close()
 
 					// perform login
-					var jsonStr = []byte(`{"user":"admin","password":"` + tc.password + `"}`)
+					var jsonStr = []byte(`{"username":"admin","password":"` + tc.password + `"}`)
 					request, err := http.NewRequest("POST", svr.URL+"/json-login", bytes.NewBuffer(jsonStr))
 					request.Header.Set("Content-Type", "application/json")
 
