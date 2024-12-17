@@ -16,9 +16,9 @@ func (sMngr *Manager) Name() string {
 }
 
 // HandleAuth implements the authenticator.AuthHandler interface to allow to use session based in the authenticator
-func (sMngr *Manager) HandleAuth(w http.ResponseWriter, r *http.Request) (loggedIn, stopEvaluation bool) {
+func (sMngr *Manager) HandleAuth(w http.ResponseWriter, r *http.Request) (allowAccess, stopEvaluation bool) {
 	stopEvaluation = false
-	loggedIn = false
+	allowAccess = false
 
 	data, session, err := sMngr.read(r)
 	if err != nil {
@@ -26,7 +26,7 @@ func (sMngr *Manager) HandleAuth(w http.ResponseWriter, r *http.Request) (logged
 		return
 	}
 	if data.IsAuthenticated {
-		loggedIn = true
+		allowAccess = true
 		CtxSetUserData(r, data)
 		err = sMngr.updateExpiry(data, session, r, w)
 		if err != nil {
@@ -87,6 +87,13 @@ func (sMngr *Manager) FormAuthHandler(auth userauth.LoginHandler, redirect strin
 		userName := r.FormValue("username")
 		userPw := r.FormValue("password")
 
+		// handle "keep me logged in"
+		sessRen := false
+		sessionRenew := r.FormValue("session_renew")
+		if sessionRenew == "on" {
+			sessRen = true
+		}
+
 		canLogin, err := auth.CanLogin(userName, userPw)
 		if err != nil {
 			// only return an error if it's NOT user not found or user disabled
@@ -106,7 +113,7 @@ func (sMngr *Manager) FormAuthHandler(auth userauth.LoginHandler, redirect strin
 		}
 
 		if canLogin {
-			err = sMngr.LoginUser(r, w, userName)
+			err = sMngr.LoginUser(r, w, userName, sessRen)
 			if err != nil {
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
@@ -125,9 +132,10 @@ func (sMngr *Manager) FormAuthHandler(auth userauth.LoginHandler, redirect strin
 // Json POST basd auth handler  ------------------------------------------------------------
 
 type loginData struct {
-	User     string `json:"user"`
-	Pw       string `json:"password"`
-	Redirect string
+	User           string `json:"user"`
+	Pw             string `json:"password"`
+	KeepMeLoggedIn bool   `json:"sessionRenew"`
+	Redirect       string
 }
 
 // JsonAuthHandler is a simple session auth handler that will respond to a Json POST request and login a user
@@ -159,7 +167,7 @@ func (sMngr *Manager) JsonAuthHandler(auth userauth.LoginHandler) http.Handler {
 		}
 
 		if canLogin {
-			err = sMngr.LoginUser(r, w, payload.User)
+			err = sMngr.LoginUser(r, w, payload.User, payload.KeepMeLoggedIn)
 			if err != nil {
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return

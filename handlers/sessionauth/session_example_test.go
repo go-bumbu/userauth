@@ -30,7 +30,7 @@ func ExampleSessionAuth() {
 	// make a call to the loging handler
 	loginReq, _ := http.NewRequest(http.MethodGet, "", nil)
 	loginRespRec := httptest.NewRecorder()
-	_ = sessionAuth.LoginUser(loginReq, loginRespRec, "demo")
+	_ = sessionAuth.LoginUser(loginReq, loginRespRec, "demo", true)
 
 	// the client will make a request with an authenticated session
 	req := httptest.NewRequest(http.MethodGet, "/some/page", nil)

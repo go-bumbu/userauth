@@ -22,6 +22,7 @@ type Cfg struct {
 	// e.g. if set to 24h, and you log in once a day, it will only expire at max MaxSessionDur
 	// default is set to 1h
 	SessionDur time.Duration
+	AllowRenew bool
 	// force a new login after this period, e.g. every 30 days, default is 24h
 	MaxSessionDur time.Duration
 
@@ -33,6 +34,7 @@ type Manager struct {
 	store sessions.Store
 
 	sessionDur    time.Duration
+	allowRenew    bool
 	minWriteSpace time.Duration
 	maxSessionDur time.Duration
 }
@@ -54,6 +56,7 @@ func New(cfg Cfg) (*Manager, error) {
 
 	c := Manager{
 		sessionDur:    cfg.SessionDur,
+		allowRenew:    cfg.AllowRenew,
 		minWriteSpace: cfg.MinWriteSpace,
 		maxSessionDur: cfg.MaxSessionDur,
 		store:         cfg.Store,
@@ -69,14 +72,20 @@ const (
 // LoginUser will store the user as logged-in in the session store
 // it is not explicitly needed to verify the authentication, but used in handlers that log in a user
 // and initiate a session, e.g. see JsonAuthHandler
-func (sMngr *Manager) LoginUser(r *http.Request, w http.ResponseWriter, userId string) error {
+func (sMngr *Manager) LoginUser(r *http.Request, w http.ResponseWriter, userId string, sessionRenew bool) error {
+
+	if !sMngr.allowRenew {
+		// force session renew to false if not allowed
+		sessionRenew = false
+	}
 	authData := SessionData{
 		UserData: UserData{
 			UserId:          userId,
 			IsAuthenticated: true,
 		},
-		Expiration:  time.Now().Add(sMngr.sessionDur),
-		ForceReAuth: time.Now().Add(sMngr.maxSessionDur),
+		RenewExpiration: sessionRenew,
+		Expiration:      time.Now().Add(sMngr.sessionDur),
+		ForceReAuth:     time.Now().Add(sMngr.maxSessionDur),
 	}
 	//session, err := sMngr.store.Get(r, SessionName)
 	session, err := sMngr.Get(r, SessionName)
@@ -152,9 +161,11 @@ func (sMngr *Manager) LogoutUser(r *http.Request, w http.ResponseWriter) error {
 //}
 
 func (sMngr *Manager) updateExpiry(data SessionData, session *sessions.Session, r *http.Request, w http.ResponseWriter) error {
-	now := time.Now()
-	if data.LastUpdate.Add(sMngr.minWriteSpace).After(now) {
+	if data.LastUpdate.Add(sMngr.minWriteSpace).After(time.Now()) {
 		return nil
+	}
+	if data.RenewExpiration {
+		data.Expiration = time.Now().Add(sMngr.sessionDur)
 	}
 	return sMngr.write(r, w, session, data)
 }
@@ -188,7 +199,7 @@ func (sMngr *Manager) read(r *http.Request) (SessionData, *sessions.Session, err
 		return SessionData{}, nil, err
 	}
 	authData := key.(SessionData)
-	authData.Process(sMngr.sessionDur)
+	authData.Verify()
 	return authData, session, err
 }
 
@@ -203,13 +214,14 @@ type SessionData struct {
 	UserData
 
 	// expiration of the session, e.g. 2 days, after a login is required, this value can be updated by "keep me logged in"
-	Expiration time.Time
+	Expiration      time.Time
+	RenewExpiration bool
 	// force re-auth, max time a session is valid, even if keep logged in is in place.
 	ForceReAuth time.Time
 	LastUpdate  time.Time
 }
 
-func (d *SessionData) Process(extend time.Duration) {
+func (d *SessionData) Verify() {
 	// check expiration
 	if d.Expiration.Before(time.Now()) {
 		d.IsAuthenticated = false
@@ -219,7 +231,7 @@ func (d *SessionData) Process(extend time.Duration) {
 		d.IsAuthenticated = false
 	}
 	// extend normal expiration
-	if d.IsAuthenticated && extend > 0 {
-		d.Expiration = d.Expiration.Add(extend)
-	}
+	//if d.IsAuthenticated && extend > 0 {
+	//	d.Expiration = d.Expiration.Add(extend)
+	//}
 }

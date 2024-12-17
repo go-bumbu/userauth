@@ -101,6 +101,13 @@ ul ul li {
     font-size: 1em;
 }
 
+
+.login-form input[type="checkbox"] {
+    width: unset;
+
+}
+
+
 .login-form button {
     display: inline-block;
     width: 100%;

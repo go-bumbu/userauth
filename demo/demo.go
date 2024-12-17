@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 //go:embed files/*
@@ -73,7 +74,13 @@ func demoHandler() http.Handler {
 	}
 
 	// instantiate a session handler with the session store
-	sessionAuthHandler, err := sessionauth.New(sessionauth.Cfg{Store: sesStore})
+	sessionAuthHandler, err := sessionauth.New(sessionauth.Cfg{
+		Store:         sesStore,
+		AllowRenew:    true,
+		SessionDur:    0,
+		MaxSessionDur: 0,
+		MinWriteSpace: 120 * time.Second,
+	})
 	if err != nil {
 		panic("error instantiating sessionauth")
 	}
@@ -106,9 +113,16 @@ func demoHandler() http.Handler {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		expire := time.Until(sessData.Expiration).Round(time.Second).String()
+		forceExpire := time.Until(sessData.Expiration).Round(time.Second).String()
+
 		data := map[string]any{
-			"LoggedIn": sessData.IsAuthenticated,
-			"user":     sessData.UserId,
+			"LoggedIn":     sessData.IsAuthenticated,
+			"user":         sessData.UserId,
+			"expiration":   expire,
+			"forceExpire":  forceExpire,
+			"sessionRenew": sessData.RenewExpiration,
 		}
 		renderTmpl(w, r, "index.tmpl.html", data)
 	})

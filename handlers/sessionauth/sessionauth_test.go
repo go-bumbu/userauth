@@ -51,7 +51,7 @@ func TestProcessSessionData(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			got := tc.in
-			got.Process(0)
+			got.Verify()
 			want := tc.want
 			if diff := cmp.Diff(want, got, cmpopts.IgnoreFields(sessionauth.SessionData{}, "Expiration", "ForceReAuth")); diff != "" {
 				t.Errorf("Content mismatch (-want +got):\n%s", diff)
@@ -62,7 +62,6 @@ func TestProcessSessionData(t *testing.T) {
 
 func doReq(client *http.Client, url string, t *testing.T) *http.Response {
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
-
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)

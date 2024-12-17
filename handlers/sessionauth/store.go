@@ -2,6 +2,8 @@ package sessionauth
 
 import (
 	"fmt"
+	"github.com/gorilla/securecookie"
+	"net/http"
 
 	"github.com/gorilla/sessions"
 )
@@ -32,8 +34,20 @@ func NewCookieStore(HashKey, BlockKey []byte) (*sessions.CookieStore, error) {
 	if blockKeyL != 16 && blockKeyL != 24 && blockKeyL != 32 {
 		return nil, fmt.Errorf("blockKey lenght should be 16, 24 or 32 bytes")
 	}
-	fsStore := sessions.NewCookieStore(HashKey, BlockKey)
-	// fsStore.MaxAge() TODO set max age of store
 
-	return fsStore, nil
+	keyPair := make([][]byte, 2)
+	keyPair = append(keyPair, HashKey, BlockKey)
+
+	cs := &sessions.CookieStore{
+		Codecs: securecookie.CodecsFromPairs(keyPair...),
+		Options: &sessions.Options{
+			Path:     "/",
+			MaxAge:   86400 * 30,
+			SameSite: http.SameSiteNoneMode,
+			HttpOnly: true,
+			Secure:   true,
+		},
+	}
+	cs.MaxAge(cs.Options.MaxAge)
+	return cs, nil
 }

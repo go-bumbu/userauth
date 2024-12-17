@@ -9,7 +9,7 @@ import (
 
 type AuthHandler interface {
 	Name() string
-	HandleAuth(w http.ResponseWriter, r *http.Request) (loggedIn, stopEvaluation bool)
+	HandleAuth(w http.ResponseWriter, r *http.Request) (allowAccess, stopEvaluation bool)
 }
 
 type callback func(w http.ResponseWriter, r *http.Request)
