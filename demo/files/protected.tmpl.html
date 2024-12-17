@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>protected page</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+</head>
+<body>
+<h3><a href="/">Home</a></h3>
+<h4>Protected content</h4>
+{{ if .text }}
+<p>{{ .text }}</p>
+{{ else }}
+<p> text is undefined</p>
+{{ end }}
+</body>
+</html>

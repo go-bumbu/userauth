@@ -1,8 +1,8 @@
-package session_test
+package sessionauth_test
 
 import (
 	"fmt"
-	"github.com/go-bumbu/userauth/auth/session"
+	"github.com/go-bumbu/userauth/handlers/sessionauth"
 	"github.com/gorilla/securecookie"
 	"net/http"
 	"net/http/httptest"
@@ -18,9 +18,9 @@ func ExampleSessionAuth() {
 	})
 
 	// create a session store:
-	store, _ := session.NewFsStore("", securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
+	store, _ := sessionauth.NewFsStore("", securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
 	// create an instance of session auth
-	sessionAuth, _ := session.New(session.Cfg{
+	sessionAuth, _ := sessionauth.New(sessionauth.Cfg{
 		Store:         store,
 		SessionDur:    time.Hour,       // time the user is logged in
 		MaxSessionDur: 24 * time.Hour,  // time after the user is forced to re-login anyway
@@ -30,7 +30,7 @@ func ExampleSessionAuth() {
 	// make a call to the loging handler
 	loginReq, _ := http.NewRequest(http.MethodGet, "", nil)
 	loginRespRec := httptest.NewRecorder()
-	_ = sessionAuth.LoginUser(loginReq, loginRespRec, "demo")
+	_ = sessionAuth.LoginUser(loginReq, loginRespRec, "demo", true)
 
 	// the client will make a request with an authenticated session
 	req := httptest.NewRequest(http.MethodGet, "/some/page", nil)

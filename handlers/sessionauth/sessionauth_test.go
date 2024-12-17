@@ -1,9 +1,9 @@
-package session_test
+package sessionauth_test
 
 import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/auth/session"
+	"github.com/go-bumbu/userauth/handlers/sessionauth"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"net/http"
@@ -16,34 +16,34 @@ func TestProcessSessionData(t *testing.T) {
 
 	tcs := []struct {
 		name string
-		in   session.SessionData
-		want session.SessionData
+		in   sessionauth.SessionData
+		want sessionauth.SessionData
 	}{
 		{
 			name: "session valid",
-			in: session.SessionData{
-				UserData: session.UserData{
+			in: sessionauth.SessionData{
+				UserData: sessionauth.UserData{
 					IsAuthenticated: true,
 				},
 				Expiration:  getTime("10m"),
 				ForceReAuth: getTime("1m"),
 			},
-			want: session.SessionData{UserData: session.UserData{IsAuthenticated: true}},
+			want: sessionauth.SessionData{UserData: sessionauth.UserData{IsAuthenticated: true}},
 		},
 		{
 			name: "session expired",
-			in: session.SessionData{UserData: session.UserData{IsAuthenticated: true},
+			in: sessionauth.SessionData{UserData: sessionauth.UserData{IsAuthenticated: true},
 				Expiration: getTime("-1s"),
 			},
-			want: session.SessionData{UserData: session.UserData{IsAuthenticated: false}},
+			want: sessionauth.SessionData{UserData: sessionauth.UserData{IsAuthenticated: false}},
 		},
 		{
 			name: "session NOT expired, but hard logout",
-			in: session.SessionData{UserData: session.UserData{IsAuthenticated: true},
+			in: sessionauth.SessionData{UserData: sessionauth.UserData{IsAuthenticated: true},
 				Expiration:  getTime("10m"),
 				ForceReAuth: getTime("-1s"),
 			},
-			want: session.SessionData{UserData: session.UserData{IsAuthenticated: false}},
+			want: sessionauth.SessionData{UserData: sessionauth.UserData{IsAuthenticated: false}},
 		},
 	}
 
@@ -51,9 +51,9 @@ func TestProcessSessionData(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			got := tc.in
-			got.Process(0)
+			got.Verify()
 			want := tc.want
-			if diff := cmp.Diff(want, got, cmpopts.IgnoreFields(session.SessionData{}, "Expiration", "ForceReAuth")); diff != "" {
+			if diff := cmp.Diff(want, got, cmpopts.IgnoreFields(sessionauth.SessionData{}, "Expiration", "ForceReAuth")); diff != "" {
 				t.Errorf("Content mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -62,7 +62,6 @@ func TestProcessSessionData(t *testing.T) {
 
 func doReq(client *http.Client, url string, t *testing.T) *http.Response {
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
-
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)

@@ -2,31 +2,28 @@ package userauth
 
 import (
 	"errors"
+	"fmt"
 )
-
-//type UserLogin interface {
-//	CanLogin(user string, password string) bool
-//}
-//type UserLoginTotp interface {
-//	CanLogin(user string, password string) bool
-//	CheckTopt(user string, topt string) bool
-//}
 
 type User struct {
 	Id      string // user Identifying string: e.g. name or email
 	HashPw  string // hashed passwd in one of the supported algorithms
 	Enabled bool   // flag if user is enabled
+	//MinLoginTime time.Time // can be set to a time, where all tokens/sessions created before this time are invalid
 }
 
-type UserStore interface {
+type UserGetter interface {
 	GetUser(id string) (User, error)
 }
 
 type LoginHandler struct {
-	UserStore UserStore
+	UserStore UserGetter
 }
 
 func (lh LoginHandler) CanLogin(userId string, plainPw string) (bool, error) {
+	if lh.UserStore == nil {
+		return false, fmt.Errorf("user store is not defined")
+	}
 	user, err := lh.UserStore.GetUser(userId)
 
 	if errors.Is(err, NotFoundErr) {
