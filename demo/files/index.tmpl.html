@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User authentication demo</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+</head>
+<style>
+
+</style>
+<body>
+<h3>Authenticator demo</h3>
+<p>{{ .Message }}</p>
+
+<p>Basicauth</p>
+<ul>
+    <li><span><a href="/basic">/basic</a>: basicauth protected page</span></li>
+</ul>
+
+<p>Session cookie</p>
+<ul>
+    <li><span><a href="/protected">/protected</a>: cookie auth protected </span></li>
+    {{ if .LoggedIn }}
+    <li><span><a href="/logout">/logout</a>: You are logged in as user: <b>{{ .user }}</b></span></li>
+    {{ else }}
+    <li><span><a href="/login">/login</a>: You are not logged in</span></li>
+    {{ end }}
+</ul>
+</body>
+</html>

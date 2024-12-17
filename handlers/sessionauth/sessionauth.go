@@ -86,18 +86,17 @@ func (sMngr *Manager) LoginUser(r *http.Request, w http.ResponseWriter, userId s
 	return sMngr.write(r, w, session, authData)
 }
 
-// Get is a wrapper around session get that will ignore the
+// Get is a wrapper around session get that will ignore cookie error and return a new session
 func (sMngr *Manager) Get(r *http.Request, name string) (*sessions.Session, error) {
 	session, err := sMngr.store.Get(r, name)
 	if err != nil {
 		var multiErr securecookie.MultiError
 		if errors.As(err, &multiErr) {
 			for _, singleErr := range multiErr {
+				// ignoring existing cookie, e.g. because we generated new key pairs
+				// then we return a new empty session
 				if singleErr.Error() == "securecookie: the value is not valid" {
 					return session, nil
-
-					// ignoring existing cookie, e.g. because we generated new key pairs
-					//return SessionData{}, nil, nil
 				}
 			}
 		}
@@ -114,7 +113,7 @@ func (sMngr *Manager) LogoutUser(r *http.Request, w http.ResponseWriter) error {
 			IsAuthenticated: false,
 		},
 	}
-	session, err := sMngr.store.Get(r, SessionName)
+	session, err := sMngr.Get(r, SessionName)
 	if err != nil {
 		return err
 	}
@@ -172,8 +171,8 @@ func (sMngr *Manager) write(r *http.Request, w http.ResponseWriter, session *ses
 	return nil
 }
 
-// Read gets the user information out of the session store
-func (sMngr *Manager) Read(r *http.Request) (SessionData, error) {
+// GetSessData gets the user information out of the session store
+func (sMngr *Manager) GetSessData(r *http.Request) (SessionData, error) {
 	data, _, err := sMngr.read(r)
 	return data, err
 }
@@ -181,23 +180,6 @@ func (sMngr *Manager) Read(r *http.Request) (SessionData, error) {
 func (sMngr *Manager) read(r *http.Request) (SessionData, *sessions.Session, error) {
 	session, err := sMngr.Get(r, SessionName)
 	if err != nil {
-		fmt.Println("handle")
-		var multiErr securecookie.MultiError
-		if errors.As(err, &multiErr) {
-			for _, singleErr := range multiErr {
-				if singleErr.Error() == "securecookie: the value is not valid" {
-
-					fmt.Println("handle")
-
-					//session.Values[sessionDataKey] = nil
-					//session.Save(r)
-
-					// ignoring existing cookie, e.g. because we generated new key pairs
-					//return SessionData{}, nil, nil
-				}
-			}
-		}
-		fmt.Println("return")
 		return SessionData{}, nil, err
 	}
 

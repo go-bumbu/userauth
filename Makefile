@@ -19,6 +19,10 @@ benchmark: ## run go benchmarks
 .PHONY: verify
 verify: test lint benchmark ## run all tests
 
+.PHONY: demo
+demo: ## run the demo
+	go run demo/*.go
+
 #==========================================================================================
 ##@ Release
 #==========================================================================================

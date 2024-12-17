@@ -293,13 +293,13 @@ func testServer(SessionDur, MaxSessionDur, update time.Duration, storeType strin
 			auth := userauth.LoginHandler{
 				UserStore: dummyUser{},
 			}
-			handler := sessionauth.FormAuthHandler(authSess, auth)
+			handler := authSess.FormAuthHandler(auth, "")
 			handler.ServeHTTP(w, r)
 		} else if r.RequestURI == "/json-login" {
 			auth := userauth.LoginHandler{
 				UserStore: dummyUser{},
 			}
-			handler := sessionauth.JsonAuthHandler(authSess, auth)
+			handler := authSess.JsonAuthHandler(auth)
 			handler.ServeHTTP(w, r)
 		} else {
 			h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
