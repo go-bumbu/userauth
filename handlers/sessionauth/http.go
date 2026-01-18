@@ -118,8 +118,10 @@ func (sMngr *Manager) FormAuthHandler(auth userauth.LoginHandler, redirect strin
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}
+			sMngr.logger.Debug("login successful", "username", userName)
 		} else {
 			//http.Redirect(w, r, r.URL.Path, http.StatusSeeOther)
+			sMngr.logger.Debug("login unsuccessful", "username", userName)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}

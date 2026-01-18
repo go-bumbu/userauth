@@ -7,7 +7,7 @@ import (
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 )
 
-func ExampleStaticUsers() {
+func Example_usrauth_CanLogin() {
 
 	// define static UserGetter
 	u := []staticusers.User{

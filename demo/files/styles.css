@@ -23,6 +23,15 @@ p {
     color: #444;
 }
 
+p.info {
+    text-align: left;
+    font-size: 1em;
+    color: #444;
+    padding: 0 15px;
+    font-style: italic;
+}
+
+
 /* Navigation Styles */
 ul {
     list-style: none;

@@ -10,7 +10,7 @@ import (
 )
 
 // nolint: govet
-func ExampleSessionAuth() {
+func Example_sessionauth_Middleware() {
 
 	// a handler for the auth protected content
 	protectedSite := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

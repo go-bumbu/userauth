@@ -13,13 +13,26 @@
 
 <p>Basicauth</p>
 <ul>
+    <p class="info">
+        This demo uses a static user provider, to verify the user/password combination,but a database could also be used.
+    <br>
+        the authentication is then performed using basicauth headers.
+    </p>
     <li><span><a href="/basic">/basic</a>: basicauth protected page<br>
         login with <i>admin:admin</i> or <i>demo:demo</i></span></li>
 </ul>
 
+
 <p>Session cookie</p>
 <ul>
-    <li><span><a href="/protected">/protected</a>: cookie auth protected </span></li>
+
+    <p class="info">
+        Same as in basicauth, this demo uses a static user provider.
+        <br>
+        The login page sets an encrypted session cookie on successful login.
+        <br>
+        Notice once logged in other pages will also be able to have access to the cookie, like the content below.
+    </p>
     {{ if .LoggedIn }}
     <li><span><a href="/logout">/logout</a>: You are logged in as user: <b>{{ .user }}</b><br>
         This session will expire in: {{ .expiration }}, or force re-auth in: {{ .forceExpire }} <br>
@@ -34,6 +47,29 @@
         login with <i>admin:admin</i> or <i>demo:demo</i>
     </span></li>
     {{ end }}
+
+    <p class="info">
+        The protected page then checks the session cookie to grant access.
+    </p>
+    <li><span><a href="/cookie-protected">/cookie-protected</a>: cookie auth protected </span></li>
 </ul>
+
+<p>Http Header</p>
+<ul>
+
+    <p class="info">
+        This handler delegates authentication to an upstream service;
+        the service should add a header "X-User-Auth" with the value set to the
+        username.
+    </p>
+
+    <p class="info">
+        The easiest way to do this is with a curl
+        <br>
+        curl -H "X-User-Auth: demo" http://localhost:8085/header-protected
+    </p>
+    <li><span><a href="/header-protected">/header-protected</a>: HTTP header protected </span></li>
+</ul>
+
 </body>
 </html>

@@ -10,7 +10,7 @@ import (
 )
 
 // nolint: govet
-func ExampleBasicAuth() {
+func Example_basicauth_Middleware() {
 	protectedSite := dummyHandler()
 
 	// create an instance of login handlers, this allows to fetch and verify user login information

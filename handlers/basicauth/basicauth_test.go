@@ -94,5 +94,4 @@ func TestBasicAuthResponseCode(t *testing.T) {
 			}
 		})
 	}
-
 }
