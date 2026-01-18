@@ -6,15 +6,14 @@ import (
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/authenticator"
 	"github.com/go-bumbu/userauth/handlers/basicauth"
+	"github.com/go-bumbu/userauth/handlers/headerauth"
 	"github.com/go-bumbu/userauth/handlers/sessionauth"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 	"html/template"
 	"io"
-	"log/slog"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -34,10 +33,6 @@ func demoHandler() http.Handler {
 
 	r := mux.NewRouter()
 
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
-
 	// login handler uses a user store to handle loging
 	loginHandler := userauth.LoginHandler{
 		UserStore: &demoUsers,
@@ -52,15 +47,15 @@ func demoHandler() http.Handler {
 			"text": "content protected by basicauth only",
 		})
 	})
-	basicAuthHandler := basicauth.NewHandler(loginHandler, "", true, log)
-	demoAuth1 := authenticator.New([]authenticator.AuthHandler{basicAuthHandler}, log, nil, nil)
+	basicAuthHandler := basicauth.NewHandler(loginHandler, "", true, logger)
+	demoAuth1 := authenticator.New([]authenticator.AuthHandler{basicAuthHandler}, logger, nil, nil)
 	basicProtected.Use(demoAuth1.Middleware)
 
 	// ===============================================
 	// cookie based session authentication
 	// ===============================================
-	apiRouter := r.Path("/protected").Methods(http.MethodGet).Subrouter()
-	apiRouter.HandleFunc("", func(writer http.ResponseWriter, request *http.Request) {
+	cookieProtected := r.Path("/cookie-protected").Methods(http.MethodGet).Subrouter()
+	cookieProtected.HandleFunc("", func(writer http.ResponseWriter, request *http.Request) {
 		renderTmpl(writer, request, "protected.tmpl.html", map[string]any{
 			"text": "content protected by session cookie",
 		})
@@ -84,8 +79,8 @@ func demoHandler() http.Handler {
 	if err != nil {
 		panic("error instantiating sessionauth")
 	}
-	demoAuth2 := authenticator.New([]authenticator.AuthHandler{sessionAuthHandler}, log, nil, nil)
-	apiRouter.Use(demoAuth2.Middleware)
+	demoAuth2 := authenticator.New([]authenticator.AuthHandler{sessionAuthHandler}, logger, nil, nil)
+	cookieProtected.Use(demoAuth2.Middleware)
 
 	// ===============================================
 	// session login/logout
@@ -97,6 +92,22 @@ func demoHandler() http.Handler {
 		sessionAuthHandler.FormAuthHandler(loginHandler, "/"))
 	r.Path("/logout").Handler(
 		sessionAuthHandler.LogoutHandler("/"))
+
+	// ===============================================
+	// Header Auth
+	// ===============================================
+
+	hauth := headerauth.New(headerauth.UserAuthHeader, true, logger)
+
+	headerProtected := r.Path("/header-protected").Methods(http.MethodGet).Subrouter()
+	headerProtected.HandleFunc("", func(writer http.ResponseWriter, request *http.Request) {
+		data := hauth.GetData(request)
+		renderTmpl(writer, request, "protected.tmpl.html", map[string]any{
+			"text": fmt.Sprintf("content protected by the presence of the header X-User-Auth with value: %s", data.UserName),
+		})
+	})
+
+	headerProtected.Use(hauth.Middleware)
 
 	// ===============================================
 	// rest of the pages
@@ -159,7 +170,9 @@ func faviconHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Favicon not found", http.StatusNotFound)
 		return
 	}
-	defer favicon.Close()
+	defer func() {
+		_ = favicon.Close()
+	}()
 
 	// Set the Content-Type header
 	w.Header().Set("Content-Type", "image/x-icon")

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -28,6 +29,8 @@ type Cfg struct {
 
 	// time between the last session update, used to not overload the session store
 	MinWriteSpace time.Duration
+
+	Logger *slog.Logger
 }
 
 type Manager struct {
@@ -37,6 +40,8 @@ type Manager struct {
 	allowRenew    bool
 	minWriteSpace time.Duration
 	maxSessionDur time.Duration
+
+	logger *slog.Logger
 }
 
 func New(cfg Cfg) (*Manager, error) {
@@ -54,12 +59,17 @@ func New(cfg Cfg) (*Manager, error) {
 		return nil, fmt.Errorf("session store cannot be nil")
 	}
 
+	if cfg.Logger == nil {
+		cfg.Logger = slog.New(slog.DiscardHandler)
+	}
+
 	c := Manager{
 		sessionDur:    cfg.SessionDur,
 		allowRenew:    cfg.AllowRenew,
 		minWriteSpace: cfg.MinWriteSpace,
 		maxSessionDur: cfg.MaxSessionDur,
 		store:         cfg.Store,
+		logger:        cfg.Logger.With("auth-handler", SessionMngrName),
 	}
 	return &c, nil
 }

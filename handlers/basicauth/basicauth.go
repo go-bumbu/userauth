@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-bumbu/userauth"
-	"io"
 	"log/slog"
 	"net/http"
 )
@@ -29,15 +28,14 @@ func NewHandler(loginHandler userauth.LoginHandler, msg string, enforce bool, l 
 	}
 
 	if l == nil {
-		// TODO: replace with slog.DiscardHandler once it gets available in a newer GO version
-		l = slog.New(slog.NewJSONHandler(io.Discard, nil))
+		l = slog.New(slog.DiscardHandler)
 	}
 
 	a := AuthHandler{
 		loginHandler: loginHandler,
 		message:      msg,
 		enforce:      enforce,
-		logger:       l,
+		logger:       l.With("auth-handler", basicAuthName),
 	}
 	return &a
 }
@@ -67,7 +65,7 @@ func (auth *AuthHandler) handleAuth(w http.ResponseWriter, r *http.Request) (log
 		if err != nil {
 			// only return an error if it's NOT user not found or user disabled
 			switch {
-			case errors.Is(err, userauth.NotFoundErr), errors.Is(err, userauth.UserDisabledErr):
+			case errors.Is(err, userauth.ErrUserNotFound), errors.Is(err, userauth.ErrUserDisabled):
 				// ignore the known errors and
 			default:
 				http.Error(w, fmt.Sprintf("Error while checking user login: %v", err), http.StatusInternalServerError)
@@ -87,14 +85,16 @@ func (auth *AuthHandler) handleAuth(w http.ResponseWriter, r *http.Request) (log
 
 func (auth *AuthHandler) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canLogin, _, username := auth.handleAuth(w, r)
+		canLogin, _, userName := auth.handleAuth(w, r)
 		if canLogin {
-			auth.logger.Debug("login successful", "username", username)
+			auth.logger.Debug("login successful", "username", userName)
 			next.ServeHTTP(w, r)
 			return
 		} else {
-			auth.logger.Debug("login unsuccessful", "username", username)
+			auth.logger.Debug("login unsuccessful", "username", userName)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
 		}
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+
 	})
 }

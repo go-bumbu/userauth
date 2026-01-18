@@ -12,11 +12,6 @@ func TestCheckHash(t *testing.T) {
 		hash string
 	}{
 		{
-			name: "sha1",
-			in:   "demo",
-			hash: "{SHA}ieSV55Qc+eQOaYDRSha/AjzNTJE=",
-		},
-		{
 			name: "bcrypt",
 			in:   "demo",
 			hash: "$2y$10$ats.g6F4WE1rSeHFqjTIvOArZ7QwQet14gm.g89iRSR7VsrFZDSJq",

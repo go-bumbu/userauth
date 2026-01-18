@@ -7,7 +7,7 @@ import (
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 )
 
-func ExampleStaticUsers() {
+func Example_usrauth_CanLogin() {
 
 	// define static UserGetter
 	u := []staticusers.User{
@@ -39,7 +39,7 @@ func ExampleStaticUsers() {
 	// check if the user demo can't log in since the account is disabled
 	isOK, err := loginHandler.CanLogin("demo", "demo")
 	switch {
-	case errors.Is(err, userauth.NotFoundErr), errors.Is(err, userauth.UserDisabledErr):
+	case errors.Is(err, userauth.ErrUserNotFound), errors.Is(err, userauth.ErrUserDisabled):
 		// expected errors
 	default:
 		panicOnErr(err)

@@ -98,11 +98,11 @@ func (sMngr *Manager) FormAuthHandler(auth userauth.LoginHandler, redirect strin
 		if err != nil {
 			// only return an error if it's NOT user not found or user disabled
 			switch {
-			case errors.Is(err, userauth.NotFoundErr):
+			case errors.Is(err, userauth.ErrUserNotFound):
 				http.Redirect(w, r, r.URL.Path, http.StatusSeeOther)
 				//http.Error(w, "User not found", http.StatusUnauthorized)
 				return
-			case errors.Is(err, userauth.UserDisabledErr):
+			case errors.Is(err, userauth.ErrUserDisabled):
 				http.Redirect(w, r, r.URL.Path, http.StatusSeeOther)
 				//http.Error(w, "User is disabled", http.StatusUnauthorized)
 				return
@@ -118,8 +118,10 @@ func (sMngr *Manager) FormAuthHandler(auth userauth.LoginHandler, redirect strin
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}
+			sMngr.logger.Debug("login successful", "username", userName)
 		} else {
 			//http.Redirect(w, r, r.URL.Path, http.StatusSeeOther)
+			sMngr.logger.Debug("login unsuccessful", "username", userName)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -159,10 +161,10 @@ func (sMngr *Manager) JsonAuthHandler(auth userauth.LoginHandler) http.Handler {
 		if err != nil {
 			// only return an error if it's NOT user not found or user disabled
 			switch {
-			case errors.Is(err, userauth.NotFoundErr):
+			case errors.Is(err, userauth.ErrUserNotFound):
 				http.Error(w, "User not found", http.StatusUnauthorized)
 				return
-			case errors.Is(err, userauth.UserDisabledErr):
+			case errors.Is(err, userauth.ErrUserDisabled):
 				http.Error(w, "User is disabled", http.StatusUnauthorized)
 				return
 			default:

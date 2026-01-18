@@ -33,6 +33,15 @@ after a bigger expiry time
 
 The user data the session stores is scoped for the use-cases intended for the session store.
 
+## httpheader
+
+This authentication handler delegates the authentication to an upstream service. It assumes that 
+if a given header is set and populated, authentication will be granted.
+
+This can be used with services like Authelia or apache mod_auth_mellon
+
+the default header is "X-User-Auth" but can be configured at initialization time.
+
 ### Usage
 
 #### Middleware

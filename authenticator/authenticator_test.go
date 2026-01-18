@@ -87,7 +87,7 @@ func TestEvalAuth(t *testing.T) {
 func TestMiddleware(t *testing.T) {
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 
 	tests := []struct {
@@ -117,7 +117,7 @@ func TestMiddleware(t *testing.T) {
 			},
 			unauthCallback: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusForbidden)
-				w.Write([]byte("Forbidden"))
+				_, _ = w.Write([]byte("Forbidden"))
 			},
 			expectedStatus: http.StatusForbidden,
 		},
