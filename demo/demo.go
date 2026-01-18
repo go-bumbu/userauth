@@ -170,7 +170,9 @@ func faviconHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Favicon not found", http.StatusNotFound)
 		return
 	}
-	defer favicon.Close()
+	defer func() {
+		_ = favicon.Close()
+	}()
 
 	// Set the Content-Type header
 	w.Header().Set("Content-Type", "image/x-icon")

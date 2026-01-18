@@ -1,9 +1,6 @@
 package userauth
 
 import (
-	"crypto/sha1"
-	"crypto/subtle"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
@@ -11,13 +8,9 @@ import (
 	"strings"
 )
 
-const SHA1Prefix = "{SHA}"
-
 // CheckPass compares a provided transient password (that is never stored) with the stored counterpart hash
 func CheckPass(plainPass, hash string) (bool, error) {
 	switch Alg(hash) {
-	case Sha1:
-		return checkSha1Pw(plainPass, hash)
 	case Bcrypt:
 		ok, err := checkBcryptPw(plainPass, hash)
 		if err != nil {
@@ -32,22 +25,6 @@ func CheckPass(plainPass, hash string) (bool, error) {
 	}
 }
 
-func checkSha1Pw(plainPass, hash string) (bool, error) {
-	b64hash := strings.TrimPrefix(hash, SHA1Prefix)
-	hashed, err := base64.StdEncoding.DecodeString(b64hash)
-	if err != nil {
-		return false, fmt.Errorf("malformed sha1 hash: %s", err.Error())
-	}
-	if len(hashed) != sha1.Size {
-		return false, fmt.Errorf("malformed sha1 wrong length")
-	}
-	st := sha1.Sum([]byte(plainPass))
-	if subtle.ConstantTimeCompare(st[:], hashed) == 1 {
-		return true, nil
-	}
-	return false, nil
-}
-
 func checkBcryptPw(plainPass, hash string) (bool, error) {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(plainPass))
 	if err != nil {
@@ -59,15 +36,11 @@ func checkBcryptPw(plainPass, hash string) (bool, error) {
 type HashAlgo int
 
 const (
-	Sha1 = iota
+	Unknown = iota
 	Bcrypt
-	Unknown
 )
 
 func Alg(hash string) HashAlgo {
-	if strings.HasPrefix(hash, SHA1Prefix) {
-		return Sha1
-	}
 	if isbCryptString(hash) {
 		return Bcrypt
 	}

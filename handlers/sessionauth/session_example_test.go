@@ -9,12 +9,11 @@ import (
 	"time"
 )
 
-// nolint: govet
 func Example_sessionauth_Middleware() {
 
 	// a handler for the auth protected content
 	protectedSite := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "protected")
+		_, _ = fmt.Fprint(w, "protected")
 	})
 
 	// create a session store:

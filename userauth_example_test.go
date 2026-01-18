@@ -39,7 +39,7 @@ func Example_usrauth_CanLogin() {
 	// check if the user demo can't log in since the account is disabled
 	isOK, err := loginHandler.CanLogin("demo", "demo")
 	switch {
-	case errors.Is(err, userauth.NotFoundErr), errors.Is(err, userauth.UserDisabledErr):
+	case errors.Is(err, userauth.ErrUserNotFound), errors.Is(err, userauth.ErrUserDisabled):
 		// expected errors
 	default:
 		panicOnErr(err)

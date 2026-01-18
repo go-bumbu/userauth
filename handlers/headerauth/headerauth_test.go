@@ -61,6 +61,6 @@ func TestHttpHeaderResponseCode(t *testing.T) {
 func dummyHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		//w.WriteHeader(statusCode)
-		fmt.Fprint(w, "protected")
+		_, _ = fmt.Fprint(w, "protected")
 	})
 }

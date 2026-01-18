@@ -26,14 +26,14 @@ func (lh LoginHandler) CanLogin(userId string, plainPw string) (bool, error) {
 	}
 	user, err := lh.UserStore.GetUser(userId)
 
-	if errors.Is(err, NotFoundErr) {
+	if errors.Is(err, ErrUserNotFound) {
 		return false, nil
 	} else if err != nil {
 		return false, err
 	}
 
 	if !user.Enabled {
-		return false, UserDisabledErr
+		return false, ErrUserDisabled
 	}
 	isOk, err := CheckPass(plainPw, user.HashPw)
 	if err != nil {
@@ -42,8 +42,8 @@ func (lh LoginHandler) CanLogin(userId string, plainPw string) (bool, error) {
 	return isOk, nil
 }
 
-// NotFoundErr is thrown when a user is not found
-var NotFoundErr = errors.New("user not found")
+// ErrUserNotFound is thrown when a user is not found
+var ErrUserNotFound = errors.New("user not found")
 
-// UserDisabledErr is thrown when a user is not enabled
-var UserDisabledErr = errors.New("user is not enabled")
+// ErrUserDisabled is thrown when a user is not enabled
+var ErrUserDisabled = errors.New("user is not enabled")

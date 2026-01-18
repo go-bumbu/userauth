@@ -9,7 +9,6 @@ import (
 	"github.com/go-bumbu/userauth/handlers/basicauth"
 )
 
-// nolint: govet
 func Example_basicauth_Middleware() {
 	protectedSite := dummyHandler()
 

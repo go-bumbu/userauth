@@ -40,6 +40,8 @@ if a given header is set and populated, authentication will be granted.
 
 This can be used with services like Authelia or apache mod_auth_mellon
 
+the default header is "X-User-Auth" but can be configured at initialization time.
+
 ### Usage
 
 #### Middleware

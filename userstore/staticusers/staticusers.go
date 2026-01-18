@@ -36,7 +36,7 @@ func (stu *Users) GetUser(userId string) (userauth.User, error) {
 			}, nil
 		}
 	}
-	return userauth.User{}, userauth.NotFoundErr
+	return userauth.User{}, userauth.ErrUserNotFound
 }
 
 func (stu *Users) Add(user User) {
@@ -50,13 +50,13 @@ func FromFile(file string) (*Users, error) {
 
 	switch fType {
 	case ExtYaml, ExtYml:
-		b, err := os.ReadFile(file)
+		b, err := os.ReadFile(file) //nolint: gosec // bytes are parsed as yaml Users struct
 		if err != nil {
 			return nil, err
 		}
 		return yamlBytes(b)
 	case ExtJson:
-		b, err := os.ReadFile(file)
+		b, err := os.ReadFile(file) //nolint: gosec // bytes are parsed as json Users struct
 		if err != nil {
 			return nil, err
 		}

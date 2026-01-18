@@ -35,13 +35,13 @@ func NewServer() *Server {
 
 func (s *Server) Start() {
 	logger.Info("Server is running on port http://localhost:8085")
-	_ = http.ListenAndServe(":8085", s.router)
+	_ = http.ListenAndServe(":8085", s.router) //nolint: gosec //test server
 }
 
 func (s *Server) Stop() {
 	if s.server != nil {
 		fmt.Println("Stopping server")
-		s.server.Close()
+		_ = s.server.Close()
 	}
 }
 

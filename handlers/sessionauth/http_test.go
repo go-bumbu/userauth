@@ -331,6 +331,7 @@ func testServer(SessionDur, MaxSessionDur, update time.Duration, allowRenew bool
 	})
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		//nolint: staticcheck // I don't want to rewrite now the test
 		if r.RequestURI == "/login" {
 			err = authSess.LoginUser(r, w, "tester", true)
 			if err != nil {

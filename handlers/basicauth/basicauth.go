@@ -65,7 +65,7 @@ func (auth *AuthHandler) handleAuth(w http.ResponseWriter, r *http.Request) (log
 		if err != nil {
 			// only return an error if it's NOT user not found or user disabled
 			switch {
-			case errors.Is(err, userauth.NotFoundErr), errors.Is(err, userauth.UserDisabledErr):
+			case errors.Is(err, userauth.ErrUserNotFound), errors.Is(err, userauth.ErrUserDisabled):
 				// ignore the known errors and
 			default:
 				http.Error(w, fmt.Sprintf("Error while checking user login: %v", err), http.StatusInternalServerError)
