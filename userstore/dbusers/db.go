@@ -2,6 +2,7 @@ package dbusers
 
 import (
 	"errors"
+
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -10,10 +11,12 @@ import (
 type DbManager struct {
 	db               *gorm.DB
 	bcryptDifficulty int // exposed as parameter for make tests faster
+	defaultEnabled   bool
 }
 
 type ManagerOpts struct {
 	BcryptDifficulty int
+	DefaultEnabled   bool // when true, users created via Create are enabled by default
 }
 
 // NewDbManager creates an instance of user manager
@@ -28,6 +31,7 @@ func NewDbManager(db *gorm.DB, opts ManagerOpts) (*DbManager, error) {
 	return &DbManager{
 		db:               db,
 		bcryptDifficulty: opts.BcryptDifficulty, // set the cost of the difficulty
+		defaultEnabled:   opts.DefaultEnabled,
 	}, nil
 }
 
@@ -51,8 +55,9 @@ type User struct {
 
 func (mng DbManager) Create(id string, pw string) error {
 	usr := User{
-		Email: id,
-		Pw:    pw,
+		Email:   id,
+		Pw:      pw,
+		Enabled: mng.defaultEnabled,
 	}
 	return mng.CreateUser(usr)
 }

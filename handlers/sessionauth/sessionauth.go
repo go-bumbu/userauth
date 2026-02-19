@@ -4,11 +4,12 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"github.com/gorilla/securecookie"
-	"github.com/gorilla/sessions"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/gorilla/securecookie"
+	"github.com/gorilla/sessions"
 )
 
 func init() {
@@ -30,6 +31,9 @@ type Cfg struct {
 	// time between the last session update, used to not overload the session store
 	MinWriteSpace time.Duration
 
+	// CookieName is the name used for the session cookie. Defaults to DefaultCookieName.
+	CookieName string
+
 	Logger *slog.Logger
 }
 
@@ -40,6 +44,7 @@ type Manager struct {
 	allowRenew    bool
 	minWriteSpace time.Duration
 	maxSessionDur time.Duration
+	cookieName    string
 
 	logger *slog.Logger
 }
@@ -62,12 +67,16 @@ func New(cfg Cfg) (*Manager, error) {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.DiscardHandler)
 	}
+	if cfg.CookieName == "" {
+		cfg.CookieName = DefaultCookieName
+	}
 
 	c := Manager{
 		sessionDur:    cfg.SessionDur,
 		allowRenew:    cfg.AllowRenew,
 		minWriteSpace: cfg.MinWriteSpace,
 		maxSessionDur: cfg.MaxSessionDur,
+		cookieName:    cfg.CookieName,
 		store:         cfg.Store,
 		logger:        cfg.Logger.With("auth-handler", SessionMngrName),
 	}
@@ -75,8 +84,9 @@ func New(cfg Cfg) (*Manager, error) {
 }
 
 const (
-	SessionName    = "_c_auth"
-	sessionDataKey = "data"
+	// DefaultCookieName is the default cookie name used when Cfg.CookieName is empty.
+	DefaultCookieName = "_c_auth"
+	sessionDataKey    = "data"
 )
 
 // LoginUser will store the user as logged-in in the session store
@@ -97,11 +107,17 @@ func (sMngr *Manager) LoginUser(r *http.Request, w http.ResponseWriter, userId s
 		Expiration:      time.Now().Add(sMngr.sessionDur),
 		ForceReAuth:     time.Now().Add(sMngr.maxSessionDur),
 	}
-	//session, err := sMngr.store.Get(r, SessionName)
-	session, err := sMngr.Get(r, SessionName)
+	session, err := sMngr.Get(r, sMngr.cookieName)
 	if err != nil {
+		sMngr.logger.Debug("login user: error getting session", "user", userId, "error", err)
 		return err
 	}
+	sMngr.logger.Debug("login user: creating session",
+		"user", userId,
+		"sessionDur", sMngr.sessionDur,
+		"maxSessionDur", sMngr.maxSessionDur,
+		"renewExpiration", sessionRenew,
+	)
 	return sMngr.write(r, w, session, authData)
 }
 
@@ -132,7 +148,7 @@ func (sMngr *Manager) LogoutUser(r *http.Request, w http.ResponseWriter) error {
 			IsAuthenticated: false,
 		},
 	}
-	session, err := sMngr.Get(r, SessionName)
+	session, err := sMngr.Get(r, sMngr.cookieName)
 	if err != nil {
 		return err
 	}
@@ -168,17 +184,27 @@ func (sMngr *Manager) GetSessData(r *http.Request) (SessionData, error) {
 }
 
 func (sMngr *Manager) read(r *http.Request) (SessionData, *sessions.Session, error) {
-	session, err := sMngr.Get(r, SessionName)
+	session, err := sMngr.Get(r, sMngr.cookieName)
 	if err != nil {
+		sMngr.logger.Debug("session read: error getting session from store", "cookie", sMngr.cookieName, "error", err)
 		return SessionData{}, nil, err
 	}
 
 	key := session.Values[sessionDataKey]
 	if key == nil {
+		sMngr.logger.Debug("session read: no session data found in store", "cookie", sMngr.cookieName, "isNew", session.IsNew)
 		return SessionData{}, nil, err
 	}
 	authData := key.(SessionData)
+	preVerify := authData.IsAuthenticated
 	authData.Verify()
+	if preVerify && !authData.IsAuthenticated {
+		sMngr.logger.Debug("session read: session expired after verify",
+			"user", authData.UserId,
+			"expiration", authData.Expiration,
+			"forceReAuth", authData.ForceReAuth,
+		)
+	}
 	return authData, session, err
 }
 

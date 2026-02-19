@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-bumbu/userauth"
 	"net/http"
+
+	"github.com/go-bumbu/userauth"
 )
 
 const SessionMngrName = "sessionAuth"
@@ -22,19 +23,27 @@ func (sMngr *Manager) HandleAuth(w http.ResponseWriter, r *http.Request) (allowA
 
 	data, session, err := sMngr.read(r)
 	if err != nil {
+		sMngr.logger.Debug("session auth: error reading session", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if data.IsAuthenticated {
+		sMngr.logger.Debug("session auth: user authenticated", "user", data.UserId)
 		allowAccess = true
 		CtxSetUserData(r, data)
 		err = sMngr.updateExpiry(data, session, r, w)
 		if err != nil {
+			sMngr.logger.Debug("session auth: error updating session expiry", "user", data.UserId, "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		return
 	}
+	sMngr.logger.Debug("session auth: user not authenticated",
+		"user", data.UserId,
+		"expiration", data.Expiration,
+		"forceReAuth", data.ForceReAuth,
+	)
 	return
 }
 
@@ -148,26 +157,32 @@ func (sMngr *Manager) JsonAuthHandler(auth userauth.LoginHandler) http.Handler {
 
 		err := json.NewDecoder(r.Body).Decode(&payload)
 		if err != nil {
+			sMngr.logger.Debug("json login: failed to decode request body", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		if payload.User == "" || payload.Pw == "" {
+			sMngr.logger.Debug("json login: empty username or password")
 			http.Error(w, "User or Password cannot be empty", http.StatusBadRequest)
 			return
 		}
 
+		sMngr.logger.Debug("json login: attempting login", "username", payload.User)
 		canLogin, err := auth.CanLogin(payload.User, payload.Pw)
 		if err != nil {
 			// only return an error if it's NOT user not found or user disabled
 			switch {
 			case errors.Is(err, userauth.ErrUserNotFound):
+				sMngr.logger.Debug("json login: user not found", "username", payload.User)
 				http.Error(w, "User not found", http.StatusUnauthorized)
 				return
 			case errors.Is(err, userauth.ErrUserDisabled):
+				sMngr.logger.Debug("json login: user is disabled", "username", payload.User)
 				http.Error(w, "User is disabled", http.StatusUnauthorized)
 				return
 			default:
+				sMngr.logger.Debug("json login: error checking credentials", "username", payload.User, "error", err)
 				http.Error(w, fmt.Sprintf("Error while checking user login: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -176,10 +191,13 @@ func (sMngr *Manager) JsonAuthHandler(auth userauth.LoginHandler) http.Handler {
 		if canLogin {
 			err = sMngr.LoginUser(r, w, payload.User, payload.KeepMeLoggedIn)
 			if err != nil {
+				sMngr.logger.Debug("json login: failed to create session", "username", payload.User, "error", err)
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}
+			sMngr.logger.Debug("json login: login successful", "username", payload.User)
 		} else {
+			sMngr.logger.Debug("json login: invalid credentials", "username", payload.User)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
