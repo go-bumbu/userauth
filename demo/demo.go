@@ -3,20 +3,22 @@ package main
 import (
 	"embed"
 	"fmt"
-	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/authenticator"
-	"github.com/go-bumbu/userauth/handlers/basicauth"
-	"github.com/go-bumbu/userauth/handlers/headerauth"
-	"github.com/go-bumbu/userauth/handlers/sessionauth"
-	"github.com/go-bumbu/userauth/userstore/staticusers"
-	"github.com/gorilla/mux"
-	"github.com/gorilla/securecookie"
 	"html/template"
 	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/authhandler"
+	"github.com/go-bumbu/userauth/authhandler/basicauth"
+	"github.com/go-bumbu/userauth/authhandler/cookieauth"
+	"github.com/go-bumbu/userauth/authhandler/headerauth"
+	"github.com/go-bumbu/userauth/loginhandler"
+	"github.com/go-bumbu/userauth/userstore/staticusers"
+	"github.com/gorilla/mux"
+	"github.com/gorilla/securecookie"
 )
 
 //go:embed files/*
@@ -48,7 +50,7 @@ func demoHandler() http.Handler {
 		})
 	})
 	basicAuthHandler := basicauth.NewHandler(loginHandler, "", true, logger)
-	demoAuth1 := authenticator.New([]authenticator.AuthHandler{basicAuthHandler}, logger, nil, nil)
+	demoAuth1 := authhandler.New([]authhandler.AuthHandler{basicAuthHandler}, logger, nil, nil)
 	basicProtected.Use(demoAuth1.Middleware)
 
 	// ===============================================
@@ -61,15 +63,12 @@ func demoHandler() http.Handler {
 		})
 	})
 
-	// instantiate a session store, note this will use a new encryption key every start
-	// in the real world you want to have them periodically rotated, changing the keys will invalidate existing cookies
-	sesStore, err := sessionauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
+	sesStore, err := cookieauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
 	if err != nil {
-		panic(fmt.Errorf("error instantiating fsstore: %v", err))
+		panic(fmt.Errorf("error instantiating cookie store: %v", err))
 	}
 
-	// instantiate a session handler with the session store
-	sessionAuthHandler, err := sessionauth.New(sessionauth.Cfg{
+	sessMgr, err := cookieauth.New(cookieauth.Cfg{
 		Store:         sesStore,
 		AllowRenew:    true,
 		SessionDur:    0,
@@ -77,9 +76,9 @@ func demoHandler() http.Handler {
 		MinWriteSpace: 120 * time.Second,
 	})
 	if err != nil {
-		panic("error instantiating sessionauth")
+		panic("error instantiating session manager")
 	}
-	demoAuth2 := authenticator.New([]authenticator.AuthHandler{sessionAuthHandler}, logger, nil, nil)
+	demoAuth2 := authhandler.New([]authhandler.AuthHandler{sessMgr}, logger, nil, nil)
 	cookieProtected.Use(demoAuth2.Middleware)
 
 	// ===============================================
@@ -89,9 +88,9 @@ func demoHandler() http.Handler {
 		renderTmpl(writer, request, "login.tmpl.html", nil)
 	})
 	r.Path("/login").Methods(http.MethodPost).Handler(
-		sessionAuthHandler.FormAuthHandler(loginHandler, "/"))
+		loginhandler.FormAuthHandler(sessMgr, loginHandler, "/"))
 	r.Path("/logout").Handler(
-		sessionAuthHandler.LogoutHandler("/"))
+		loginhandler.LogoutHandler(sessMgr, "/"))
 
 	// ===============================================
 	// Header Auth
@@ -119,7 +118,7 @@ func demoHandler() http.Handler {
 	r.Path("/favicon.ico").Methods(http.MethodGet).HandlerFunc(faviconHandler)
 
 	r.Path("/").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sessData, err := sessionAuthHandler.GetSessData(r)
+		sessData, err := sessMgr.GetSessData(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -141,8 +140,6 @@ func demoHandler() http.Handler {
 }
 
 func renderTmpl(w http.ResponseWriter, r *http.Request, file string, data map[string]any) {
-	// Parse the template from the embedded filesystem
-
 	tmpl, err := template.ParseFS(embedFs, filepath.Join("files", file))
 	if err != nil {
 		http.Error(w, "Error loading template", http.StatusInternalServerError)
@@ -155,7 +152,6 @@ func renderTmpl(w http.ResponseWriter, r *http.Request, file string, data map[st
 		w.Header().Set("Content-Type", "text/css")
 	}
 
-	// Execute the template and write the response
 	err = tmpl.Execute(w, data)
 	if err != nil {
 		http.Error(w, "Error rendering template", http.StatusInternalServerError)
@@ -174,10 +170,8 @@ func faviconHandler(w http.ResponseWriter, r *http.Request) {
 		_ = favicon.Close()
 	}()
 
-	// Set the Content-Type header
 	w.Header().Set("Content-Type", "image/x-icon")
 
-	// Copy the file content to the response
 	if _, err := io.Copy(w, favicon); err != nil {
 		http.Error(w, "Failed to serve favicon", http.StatusInternalServerError)
 		return
