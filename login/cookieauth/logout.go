@@ -3,7 +3,7 @@ package cookieauth
 import (
 	"net/http"
 
-	"github.com/go-bumbu/userauth/authhandler/cookieauth"
+	"github.com/go-bumbu/userauth/auth/cookieauth"
 )
 
 // LogoutHandler returns an HTTP handler that destroys the session and optionally redirects.

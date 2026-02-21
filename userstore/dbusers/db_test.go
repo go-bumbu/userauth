@@ -1,16 +1,18 @@
 package dbusers
 
 import (
+	"log"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/go-bumbu/userauth/hashutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"log"
-	"os"
-	"testing"
-	"time"
 )
 
 const dbFile = "test.db"
@@ -85,7 +87,6 @@ func TestCreateUser(t *testing.T) {
 }
 
 func TestLogin(t *testing.T) {
-
 	mng := setup(t)
 	defer clean()
 
@@ -96,24 +97,31 @@ func TestLogin(t *testing.T) {
 	})
 
 	t.Run("assert correct login", func(t *testing.T) {
-		got := mng.AllowLogin("test@mail.com", "1234")
-		if got != true {
-			t.Errorf("expecting login failure")
+		u, err := mng.GetUser("test@mail.com")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ok, err := hashutil.VerifyPassword("1234", u.HashPw)
+		if err != nil || !ok {
+			t.Errorf("expecting login success: ok=%v err=%v", ok, err)
 		}
 	})
 
 	t.Run("assert wrong password login", func(t *testing.T) {
-		got := mng.AllowLogin("test@mail.com", "12345")
-		if got != false {
-			t.Errorf("expecting login failure")
+		u, err := mng.GetUser("test@mail.com")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ok, _ := hashutil.VerifyPassword("12345", u.HashPw)
+		if ok {
+			t.Errorf("expecting login failure for wrong password")
 		}
 	})
 
 	t.Run("assert wrong user name", func(t *testing.T) {
-		got := mng.AllowLogin("test_@mail.com", "1234")
-		if got != false {
-			t.Errorf("expecting login failure")
+		_, err := mng.GetUser("test_@mail.com")
+		if err == nil {
+			t.Errorf("expecting error for unknown user")
 		}
 	})
-
 }

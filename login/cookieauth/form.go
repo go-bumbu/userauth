@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/authhandler/cookieauth"
+	"github.com/go-bumbu/userauth/auth/cookieauth"
 )
 
 // FormAuthHandler returns an HTTP handler that accepts form POST login (username, password, session_renew)

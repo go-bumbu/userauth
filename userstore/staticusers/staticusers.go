@@ -2,26 +2,36 @@ package staticusers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/go-bumbu/userauth"
-	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/go-bumbu/userauth"
+	"gopkg.in/yaml.v3"
 )
 
-// ensure the interface is fulfilled
+// ensure the interfaces are fulfilled
 var _ userauth.UserGetter = &Users{}
+var _ userauth.TOTPGetter = &Users{}
+var _ userauth.SecondFactorProvider = &Users{}
+var _ userauth.EmailCodeVerifier = &Users{}
+var _ userauth.SMSCodeVerifier = &Users{}
 
 type User struct {
-	Id      string `yaml:"id" json:"id"`           // user Identifying string: e.g. name or email
-	HashPw  string `yaml:"pw" json:"pw"`           // hashed passwd in one of the supported algorithms
-	Enabled bool   `yaml:"enabled" json:"enabled"` // flag if user is enabled
+	Id          string `yaml:"id" json:"id"`                     // user identifying string: e.g. name or email
+	HashPw      string `yaml:"pw" json:"pw"`                     // hashed password in one of the supported algorithms
+	Enabled     bool   `yaml:"enabled" json:"enabled"`           // flag if user is enabled
+	TOTPEnabled bool   `yaml:"totp_enabled" json:"totp_enabled"` // if true and totp_secret set, user has TOTP 2FA (file or hardcoded)
+	TOTPSecret  string `yaml:"totp_secret" json:"totp_secret"`   // base32 TOTP secret (optional)
 }
 
 // TODO: add option to allow plaintext passwords in files,
 // and in consequence hash on init
 
+// Users holds a static user list. TOTP is read from each user's TOTPEnabled/TOTPSecret (hardcoded or from file).
 type Users struct {
 	Users []User `yaml:"users"`
 }
@@ -37,6 +47,56 @@ func (stu *Users) GetUser(userId string) (userauth.User, error) {
 		}
 	}
 	return userauth.User{}, userauth.ErrUserNotFound
+}
+
+// GetTOTP implements userauth.TOTPGetter. Returns TOTP from the user's TOTPEnabled/TOTPSecret (hardcoded or loaded from file).
+func (stu *Users) GetTOTP(userID string) (userauth.TOTPData, error) {
+	for _, u := range stu.Users {
+		if u.Id == userID {
+			return userauth.TOTPData{Enabled: u.TOTPEnabled, Secret: u.TOTPSecret}, nil
+		}
+	}
+	return userauth.TOTPData{Enabled: false}, nil
+}
+
+// AvailableSecondFactors implements userauth.SecondFactorProvider. Returns TOTP when the user has TOTPEnabled true and TOTPSecret set (from file or hardcoded).
+func (stu *Users) AvailableSecondFactors(userID string) ([]userauth.SecondFactor, error) {
+	for _, u := range stu.Users {
+		if u.Id == userID && u.TOTPEnabled && u.TOTPSecret != "" {
+			return []userauth.SecondFactor{userauth.SecondFactorTOTP}, nil
+		}
+	}
+	return nil, nil
+}
+
+// VerifyRecoveryCode implements userauth.TOTPGetter. Static users have no codes; always false.
+func (stu *Users) VerifyRecoveryCode(userID, code string) (bool, error) {
+	return false, nil
+}
+
+// VerifyEmailCode implements userauth.EmailCodeVerifier. Static users do not support email verification; always false.
+func (stu *Users) VerifyEmailCode(userID, code string) (bool, error) {
+	return false, nil
+}
+
+// GenerateEmailVerificationCode is a store method. Static users do not support it; returns error.
+func (stu *Users) GenerateEmailVerificationCode(userID string) (string, time.Time, error) {
+	return "", time.Time{}, errors.New("email verification not supported for static users")
+}
+
+// VerifySMSCode implements userauth.SMSCodeVerifier. Static users do not support SMS; always false.
+func (stu *Users) VerifySMSCode(userID, code string) (bool, error) {
+	return false, nil
+}
+
+// GenerateSMSVerificationCode is a store method. Static users do not support it; returns error.
+func (stu *Users) GenerateSMSVerificationCode(userID string) (string, time.Time, error) {
+	return "", time.Time{}, errors.New("SMS verification not supported for static users")
+}
+
+// GetRecoveryCodesCount is a store method. Static users have no codes; always 0.
+func (stu *Users) GetRecoveryCodesCount(userID string) (int, error) {
+	return 0, nil
 }
 
 func (stu *Users) Add(user User) {

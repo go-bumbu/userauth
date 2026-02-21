@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/authhandler"
 )
 
 // AuthHandler verifies if basic auth information is present in the request and allows to log-in if credentials match.
@@ -63,7 +62,7 @@ func (auth *AuthHandler) handleAuth(w http.ResponseWriter, r *http.Request) (log
 	username, password, ok := r.BasicAuth()
 	loggedIn = false
 	if ok {
-		canLogin, err := auth.loginHandler.CanLogin(username, password)
+		result, err := auth.loginHandler.CanLogin(username, password)
 		if err != nil {
 			// only return an error if it's NOT user not found or user disabled
 			switch {
@@ -75,7 +74,7 @@ func (auth *AuthHandler) handleAuth(w http.ResponseWriter, r *http.Request) (log
 			}
 		}
 
-		if canLogin {
+		if result.Authenticated {
 			loggedIn = true
 		}
 	}
@@ -84,8 +83,6 @@ func (auth *AuthHandler) handleAuth(w http.ResponseWriter, r *http.Request) (log
 	}
 	return
 }
-
-var _ authhandler.AuthHandler = (*AuthHandler)(nil)
 
 func (auth *AuthHandler) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

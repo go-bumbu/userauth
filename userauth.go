@@ -3,11 +3,9 @@ package userauth
 import (
 	"errors"
 	"fmt"
-	"slices"
-	"strings"
 
+	"github.com/go-bumbu/userauth/hashutil"
 	"github.com/pquerna/otp/totp"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type User struct {
@@ -26,32 +24,55 @@ type TOTPData struct {
 	Secret  string // the shared secret for TOTP generation
 }
 
+// SecondFactor is a kind of second factor that can be required at login.
+type SecondFactor string
+
+const (
+	SecondFactorTOTP  SecondFactor = "totp"
+	SecondFactorEmail SecondFactor = "email"
+	SecondFactorSMS   SecondFactor = "sms"
+)
+
+// SecondFactorProvider returns the list of second factors enabled for a user. LoginHandler uses this to decide Requires2FA and to expose available options.
+type SecondFactorProvider interface {
+	AvailableSecondFactors(userID string) ([]SecondFactor, error)
+}
+
+// TOTPGetter is the read-only interface for TOTP 2FA (authenticator app and recovery codes). LoginHandler uses only this.
 type TOTPGetter interface {
 	GetTOTP(userID string) (TOTPData, error)
+	VerifyRecoveryCode(userID, code string) (bool, error)
 }
 
+// EmailCodeVerifier verifies a one-time email verification code at login.
+type EmailCodeVerifier interface {
+	VerifyEmailCode(userID, code string) (bool, error)
+}
+
+// SMSCodeVerifier verifies a one-time SMS verification code at login.
+type SMSCodeVerifier interface {
+	VerifySMSCode(userID, code string) (bool, error)
+}
+
+// LoginHandler checks user credentials and optional 2FA. It depends only on read interfaces (no store interface).
+// Wire SecondFactors to report which 2FA methods are available for a user; wire TOTP, EmailCode, and/or SMSCode when the store supports each for verification.
 type LoginHandler struct {
-	users UserGetter
-	totp  TOTPGetter
-}
-
-// NewLoginHandler returns a LoginHandler that uses the given UserGetter for credential checks.
-// Pass nil for totp to disable 2FA.
-func NewLoginHandler(users UserGetter, totp TOTPGetter) *LoginHandler {
-	if users == nil {
-		panic("userauth: UserGetter cannot be nil")
-	}
-	return &LoginHandler{users: users, totp: totp}
+	UserStore     UserGetter           // user lookup for login
+	SecondFactors SecondFactorProvider // optional; when set, used to determine Requires2FA and available second factors
+	TOTP          TOTPGetter           // optional; when set and in AvailableSecondFactors, login can use TOTP or recovery code
+	EmailCode     EmailCodeVerifier    // optional; verify email verification code
+	SMSCode       SMSCodeVerifier      // optional; verify SMS verification code
 }
 
 type LoginResult struct {
-	UserID        string
-	Authenticated bool
-	Requires2FA   bool
+	UserID                 string
+	Authenticated          bool
+	Requires2FA            bool
+	AvailableSecondFactors []SecondFactor // set when Requires2FA is true; which methods the user can use
 }
 
 func (lh *LoginHandler) CanLogin(userID string, plainPw string) (LoginResult, error) {
-	user, err := lh.users.GetUser(userID)
+	user, err := lh.UserStore.GetUser(userID)
 	if err != nil {
 		return LoginResult{Authenticated: false}, err
 	}
@@ -59,8 +80,8 @@ func (lh *LoginHandler) CanLogin(userID string, plainPw string) (LoginResult, er
 		return LoginResult{Authenticated: false}, ErrUserDisabled
 	}
 
-	// verify password — LoginHandler owns this logic
-	ok, err := CheckPass(plainPw, user.HashPw)
+	// verify password using hashutil
+	ok, err := hashutil.VerifyPassword(plainPw, user.HashPw)
 	if err != nil {
 		return LoginResult{Authenticated: false}, nil
 	}
@@ -68,17 +89,18 @@ func (lh *LoginHandler) CanLogin(userID string, plainPw string) (LoginResult, er
 		return LoginResult{Authenticated: false}, nil
 	}
 
-	// optional: check if 2FA is required
-	if lh.totp != nil {
-		totpData, err := lh.totp.GetTOTP(userID)
+	// optional: check if 2FA is required via single provider
+	if lh.SecondFactors != nil {
+		available, err := lh.SecondFactors.AvailableSecondFactors(userID)
 		if err != nil {
 			return LoginResult{Authenticated: false}, err
 		}
-		if totpData.Enabled {
+		if len(available) > 0 {
 			return LoginResult{
-				Authenticated: false,
-				UserID:        user.Id,
-				Requires2FA:   true,
+				Authenticated:          false,
+				UserID:                 user.Id,
+				Requires2FA:            true,
+				AvailableSecondFactors: available,
 			}, nil
 		}
 	}
@@ -90,11 +112,11 @@ func (lh *LoginHandler) CanLogin(userID string, plainPw string) (LoginResult, er
 }
 
 func (lh *LoginHandler) VerifyTOTP(userID, code string) (LoginResult, error) {
-	if lh.totp == nil {
-		return LoginResult{}, fmt.Errorf("2FA not configured")
+	if lh.TOTP == nil {
+		return LoginResult{}, fmt.Errorf("TOTP not configured")
 	}
 
-	totpData, err := lh.totp.GetTOTP(userID)
+	totpData, err := lh.TOTP.GetTOTP(userID)
 	if err != nil {
 		return LoginResult{Authenticated: false}, err
 	}
@@ -113,85 +135,72 @@ func (lh *LoginHandler) VerifyTOTP(userID, code string) (LoginResult, error) {
 	}, nil
 }
 
+// VerifyRecoveryCode verifies the given code against the user's recovery codes, consumes it on success, and returns a LoginResult.
+func (lh *LoginHandler) VerifyRecoveryCode(userID, code string) (LoginResult, error) {
+	if lh.TOTP == nil {
+		return LoginResult{}, fmt.Errorf("TOTP not configured")
+	}
+	ok, err := lh.TOTP.VerifyRecoveryCode(userID, code)
+	if err != nil {
+		return LoginResult{Authenticated: false}, err
+	}
+	if !ok {
+		return LoginResult{Authenticated: false}, nil
+	}
+	return LoginResult{
+		UserID:        userID,
+		Authenticated: true,
+	}, nil
+}
+
+// VerifyEmailCode verifies the given email verification code, consumes it on success, and returns a LoginResult.
+func (lh *LoginHandler) VerifyEmailCode(userID, code string) (LoginResult, error) {
+	if lh.EmailCode == nil {
+		return LoginResult{}, fmt.Errorf("email verification not configured")
+	}
+	ok, err := lh.EmailCode.VerifyEmailCode(userID, code)
+	if err != nil {
+		return LoginResult{Authenticated: false}, err
+	}
+	if !ok {
+		return LoginResult{Authenticated: false}, nil
+	}
+	return LoginResult{
+		UserID:        userID,
+		Authenticated: true,
+	}, nil
+}
+
+// VerifySMSCode verifies the given SMS verification code, consumes it on success, and returns a LoginResult.
+func (lh *LoginHandler) VerifySMSCode(userID, code string) (LoginResult, error) {
+	if lh.SMSCode == nil {
+		return LoginResult{}, fmt.Errorf("SMS verification not configured")
+	}
+	ok, err := lh.SMSCode.VerifySMSCode(userID, code)
+	if err != nil {
+		return LoginResult{Authenticated: false}, err
+	}
+	if !ok {
+		return LoginResult{Authenticated: false}, nil
+	}
+	return LoginResult{
+		UserID:        userID,
+		Authenticated: true,
+	}, nil
+}
+
 // ErrUserNotFound is thrown when a user is not found
 var ErrUserNotFound = errors.New("user not found")
 
 // ErrUserDisabled is thrown when a user is not enabled
 var ErrUserDisabled = errors.New("user is not enabled")
 
-// CheckPass compares a provided transient password (that is never stored) with the stored counterpart hash
+// CheckPass compares a plain password with a stored hash. Returns true if they match.
 func CheckPass(plainPass, hash string) (bool, error) {
-	switch Alg(hash) {
-	case Bcrypt:
-		ok, err := checkBcryptPw(plainPass, hash)
-		if err != nil {
-			if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-				return false, nil
-			}
-			return false, err
-		}
-		return ok, nil
-	default:
-		return false, fmt.Errorf("unknown crypto algorithm")
-	}
+	return hashutil.VerifyPassword(plainPass, hash)
 }
 
-func checkBcryptPw(plainPass, hash string) (bool, error) {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(plainPass))
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-type HashAlgo int
-
-const (
-	Unknown = iota
-	Bcrypt
-)
-
-func Alg(hash string) HashAlgo {
-	if isbCryptString(hash) {
-		return Bcrypt
-	}
-	return Unknown
-}
-
-// HashPw creates a hash encrypted password of the provided string
-func HashPw(pw string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
-	return string(bytes), err
-}
+// MustHashPw returns a bcrypt hash of the password; panics on error.
 func MustHashPw(pw string) string {
-	hash, err := HashPw(pw)
-	if err != nil {
-		panic(err)
-	}
-	return hash
-}
-
-const (
-	BCryp1PRefix = "$2$"
-	BCryp2PRefix = "$2a$"
-	BCryp3PRefix = "$2b$"
-	BCryp4PRefix = "$2x$"
-	BCryp5PRefix = "$2y$"
-)
-
-var bCryptPrefix = []string{
-	BCryp2PRefix,
-	BCryp3PRefix,
-	BCryp4PRefix,
-	BCryp5PRefix,
-}
-
-func isbCryptString(hash string) bool {
-	if strings.HasPrefix(hash, BCryp1PRefix) {
-		return true
-	}
-	if len(hash) >= 3 && slices.Contains(bCryptPrefix, hash[:4]) {
-		return true
-	}
-	return false
+	return hashutil.MustHashPassword(pw)
 }

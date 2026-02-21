@@ -2,12 +2,11 @@ package basicauth_test
 
 import (
 	"fmt"
+	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/auth/basicauth"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/authhandler/basicauth"
 )
 
 type dummyUser struct {

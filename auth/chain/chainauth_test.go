@@ -1,4 +1,4 @@
-package authhandler_test
+package chain_test
 
 import (
 	"net/http"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/go-bumbu/userauth/authhandler"
+	"github.com/go-bumbu/userauth/auth/chain"
 )
 
 var _ = spew.Dump
@@ -34,19 +34,19 @@ func (m *MockAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) (bo
 func TestEvalAuth(t *testing.T) {
 	tcs := []struct {
 		name     string
-		handlers []authhandler.AuthHandler
+		handlers []chain.AuthHandler
 		expected bool
 	}{
 		{
 			name: "Auth successful on first handler",
-			handlers: []authhandler.AuthHandler{
+			handlers: []chain.AuthHandler{
 				&MockAuthHandler{name: "handler1", loggedIn: true},
 			},
 			expected: true,
 		},
 		{
 			name: "Auth successful after second handler",
-			handlers: []authhandler.AuthHandler{
+			handlers: []chain.AuthHandler{
 				&MockAuthHandler{name: "handler1", loggedIn: false},
 				&MockAuthHandler{name: "handler2", loggedIn: true},
 			},
@@ -54,14 +54,14 @@ func TestEvalAuth(t *testing.T) {
 		},
 		{
 			name: "Auth stops evaluation",
-			handlers: []authhandler.AuthHandler{
+			handlers: []chain.AuthHandler{
 				&MockAuthHandler{name: "handler1", stopEval: true},
 			},
 			expected: false,
 		},
 		{
 			name: "Auth fails for all handlers",
-			handlers: []authhandler.AuthHandler{
+			handlers: []chain.AuthHandler{
 				&MockAuthHandler{name: "handler1", loggedIn: false},
 				&MockAuthHandler{name: "handler2", loggedIn: false},
 			},
@@ -71,7 +71,7 @@ func TestEvalAuth(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			auth := authhandler.New(tc.handlers, nil, nil, nil)
+			auth := chain.New(tc.handlers, nil, nil, nil)
 
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			rr := httptest.NewRecorder()
@@ -93,27 +93,27 @@ func TestMiddleware(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		handlers       []authhandler.AuthHandler
+		handlers       []chain.AuthHandler
 		unauthCallback func(w http.ResponseWriter, r *http.Request)
 		expectedStatus int
 	}{
 		{
 			name: "Authorized request",
-			handlers: []authhandler.AuthHandler{
+			handlers: []chain.AuthHandler{
 				&MockAuthHandler{name: "handler1", loggedIn: true},
 			},
 			expectedStatus: http.StatusOK,
 		},
 		{
 			name: "Unauthorized request",
-			handlers: []authhandler.AuthHandler{
+			handlers: []chain.AuthHandler{
 				&MockAuthHandler{name: "handler1", loggedIn: false},
 			},
 			expectedStatus: http.StatusUnauthorized,
 		},
 		{
 			name: "Unauthorized request with callback",
-			handlers: []authhandler.AuthHandler{
+			handlers: []chain.AuthHandler{
 				&MockAuthHandler{name: "handler1", loggedIn: false},
 			},
 			unauthCallback: func(w http.ResponseWriter, r *http.Request) {
@@ -126,7 +126,7 @@ func TestMiddleware(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			auth := authhandler.New(tc.handlers, nil, tc.unauthCallback, nil)
+			auth := chain.New(tc.handlers, nil, tc.unauthCallback, nil)
 
 			middleware := auth.Middleware(mockHandler)
 			req := httptest.NewRequest(http.MethodGet, "/", nil)

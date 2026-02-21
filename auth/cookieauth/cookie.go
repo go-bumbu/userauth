@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-bumbu/userauth/authhandler"
+	"github.com/go-bumbu/userauth/auth/chain"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 )
@@ -34,7 +34,7 @@ type Cfg struct {
 	Logger     *slog.Logger
 }
 
-// Manager manages session storage and validation. It implements authhandler.AuthHandler.
+// Manager manages session storage and validation. It implements chain.AuthHandler.
 type Manager struct {
 	store         sessions.Store
 	sessionDur    time.Duration
@@ -84,12 +84,12 @@ func New(cfg Cfg) (*Manager, error) {
 	return &m, nil
 }
 
-// Name implements authhandler.AuthHandler.
+// Name implements chain.AuthHandler.
 func (m *Manager) Name() string {
 	return SessionMngrName
 }
 
-// HandleAuth implements authhandler.AuthHandler. It validates whether the request has a valid session.
+// HandleAuth implements chain.AuthHandler. It validates whether the request has a valid session.
 func (m *Manager) HandleAuth(w http.ResponseWriter, r *http.Request) (allowAccess, stopEvaluation bool) {
 	data, session, err := m.read(r)
 	if err != nil {
@@ -128,8 +128,8 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// Verify authhandler.AuthHandler at compile time.
-var _ authhandler.AuthHandler = (*Manager)(nil)
+// Verify chain.AuthHandler at compile time.
+var _ chain.AuthHandler = (*Manager)(nil)
 
 // LoginUser stores the user as logged-in in the session store.
 func (m *Manager) LoginUser(r *http.Request, w http.ResponseWriter, userID string, sessionRenew bool) error {

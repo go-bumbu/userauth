@@ -2,11 +2,10 @@ package basicauth_test
 
 import (
 	"fmt"
+	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/auth/basicauth"
 	"net/http"
 	"net/http/httptest"
-
-	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/authhandler/basicauth"
 )
 
 func Example_basicauth_Middleware() {
