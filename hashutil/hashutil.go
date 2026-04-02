@@ -3,10 +3,12 @@
 package hashutil
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
@@ -96,12 +98,56 @@ func VerifyPassword(plainPassword, hash string) (bool, error) {
 	}
 }
 
-// Recovery code hashing (SHA-256, for one-time codes)
+// Recovery code hashing (bcrypt for recovery codes, SHA-256 for short-lived verification codes)
 
-// HashRecoveryCode returns a deterministic hash of the recovery code suitable for storage.
-// Use when generating codes (hash before storing) and when verifying (hash user input to compare with stored hashes).
+// recoveryCodeCharset is alphanumeric (lowercase + digits) for recovery codes.
+const recoveryCodeCharset = "abcdefghijklmnopqrstuvwxyz0123456789"
+
+// recoveryCodeLength is the length of each generated recovery code.
+const recoveryCodeLength = 8
+
+// GenerateRecoveryCodes returns count plain recovery codes (e.g. for display once to the user). Caller hashes and stores via RecoveryCodeConfigurator.SetRecoveryCodes.
+func GenerateRecoveryCodes(count int) ([]string, error) {
+	if count <= 0 || count > 100 {
+		return nil, fmt.Errorf("GenerateRecoveryCodes: count must be 1..100, got %d", count)
+	}
+	out := make([]string, 0, count)
+	charsetLen := big.NewInt(int64(len(recoveryCodeCharset)))
+	for i := 0; i < count; i++ {
+		var code []byte
+		for j := 0; j < recoveryCodeLength; j++ {
+			n, err := rand.Int(rand.Reader, charsetLen)
+			if err != nil {
+				return nil, err
+			}
+			code = append(code, recoveryCodeCharset[n.Int64()])
+		}
+		out = append(out, string(code))
+	}
+	return out, nil
+}
+
+// HashRecoveryCode returns a bcrypt hash of the recovery code suitable for storage.
+// Use when generating recovery codes (hash before storing). Recovery codes are low-entropy,
+// so bcrypt's slow hashing prevents brute-force attacks on a stolen database.
 // Input is trimmed of surrounding whitespace before hashing.
-func HashRecoveryCode(code string) string {
+func HashRecoveryCode(code string) (string, error) {
+	b, err := bcrypt.GenerateFromPassword([]byte(strings.TrimSpace(code)), bcrypt.DefaultCost)
+	return string(b), err
+}
+
+// VerifyRecoveryCodeHash compares a plain recovery code against a bcrypt hash.
+// Returns true if they match.
+func VerifyRecoveryCodeHash(code, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(strings.TrimSpace(code)))
+	return err == nil
+}
+
+// HashCodeSHA256 returns a deterministic SHA-256 hash of the code, hex-encoded.
+// Use for short-lived verification codes (email, SMS) where deterministic DB lookup is needed
+// and the code expires quickly, making brute-force impractical.
+// Input is trimmed of surrounding whitespace before hashing.
+func HashCodeSHA256(code string) string {
 	h := sha256.Sum256([]byte(strings.TrimSpace(code)))
 	return hex.EncodeToString(h[:])
 }

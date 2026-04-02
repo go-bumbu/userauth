@@ -2,12 +2,10 @@ package staticusers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/go-bumbu/userauth"
 	"gopkg.in/yaml.v3"
@@ -16,9 +14,8 @@ import (
 // ensure the interfaces are fulfilled
 var _ userauth.UserGetter = &Users{}
 var _ userauth.TOTPGetter = &Users{}
+var _ userauth.RecoveryCodeVerifier = &Users{}
 var _ userauth.SecondFactorProvider = &Users{}
-var _ userauth.EmailCodeVerifier = &Users{}
-var _ userauth.SMSCodeVerifier = &Users{}
 
 type User struct {
 	Id          string `yaml:"id" json:"id"`                     // user identifying string: e.g. name or email
@@ -69,34 +66,9 @@ func (stu *Users) AvailableSecondFactors(userID string) ([]userauth.SecondFactor
 	return nil, nil
 }
 
-// VerifyRecoveryCode implements userauth.TOTPGetter. Static users have no codes; always false.
+// VerifyRecoveryCode implements userauth.RecoveryCodeVerifier. Static users have no codes; always false.
 func (stu *Users) VerifyRecoveryCode(userID, code string) (bool, error) {
 	return false, nil
-}
-
-// VerifyEmailCode implements userauth.EmailCodeVerifier. Static users do not support email verification; always false.
-func (stu *Users) VerifyEmailCode(userID, code string) (bool, error) {
-	return false, nil
-}
-
-// GenerateEmailVerificationCode is a store method. Static users do not support it; returns error.
-func (stu *Users) GenerateEmailVerificationCode(userID string) (string, time.Time, error) {
-	return "", time.Time{}, errors.New("email verification not supported for static users")
-}
-
-// VerifySMSCode implements userauth.SMSCodeVerifier. Static users do not support SMS; always false.
-func (stu *Users) VerifySMSCode(userID, code string) (bool, error) {
-	return false, nil
-}
-
-// GenerateSMSVerificationCode is a store method. Static users do not support it; returns error.
-func (stu *Users) GenerateSMSVerificationCode(userID string) (string, time.Time, error) {
-	return "", time.Time{}, errors.New("SMS verification not supported for static users")
-}
-
-// GetRecoveryCodesCount is a store method. Static users have no codes; always 0.
-func (stu *Users) GetRecoveryCodesCount(userID string) (int, error) {
-	return 0, nil
 }
 
 func (stu *Users) Add(user User) {

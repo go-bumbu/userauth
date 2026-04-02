@@ -34,8 +34,11 @@ func NewServer() *Server {
 }
 
 func (s *Server) Start() {
-	logger.Info("Server is running on port http://localhost:8085")
-	_ = http.ListenAndServe(":8085", s.router) //nolint: gosec //test server
+	logger.Info("Server is running on port http://localhost:8084")
+	err := http.ListenAndServe(":8084", s.router) //nolint: gosec //test server
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (s *Server) Stop() {

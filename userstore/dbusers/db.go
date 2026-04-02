@@ -13,16 +13,28 @@ import (
 	"gorm.io/gorm"
 )
 
+// Ensure DbManager implements the split MFA interfaces.
+var (
+	_ userauth.TOTPConfigurator         = (*DbManager)(nil)
+	_ userauth.RecoveryCodeConfigurator = (*DbManager)(nil)
+	_ userauth.RecoveryCodeVerifier     = (*DbManager)(nil)
+	_ userauth.RecoveryCodeCountGetter  = (*DbManager)(nil)
+)
+
 // DbManager is an opinionated user manager that stores the information on a gorm database
 type DbManager struct {
 	db               *gorm.DB
-	bcryptDifficulty int // exposed as parameter for make tests faster
+	bcryptDifficulty int
 	defaultEnabled   bool
+	usernameFormat   userauth.UsernameFormat // validates login ID in Create (email, plain, or any)
+	totpEncKey       []byte                  // AES-256 key for encrypting TOTP secrets at rest (nil = no encryption)
 }
 
 type ManagerOpts struct {
-	BcryptDifficulty int
-	DefaultEnabled   bool // when true, users created via Create are enabled by default
+	BcryptDifficulty  int
+	DefaultEnabled    bool                    // when true, users created via Create are enabled by default
+	UsernameFormat    userauth.UsernameFormat // policy for login ID: email, plain, or any (default)
+	TOTPEncryptionKey []byte                  // 32-byte AES-256 key for encrypting TOTP secrets; nil disables encryption
 }
 
 // NewDbManager creates an instance of user manager
@@ -34,25 +46,33 @@ func NewDbManager(db *gorm.DB, opts ManagerOpts) (*DbManager, error) {
 		return nil, err
 	}
 
+	if len(opts.TOTPEncryptionKey) != 0 && len(opts.TOTPEncryptionKey) != 32 {
+		return nil, fmt.Errorf("TOTPEncryptionKey must be exactly 32 bytes, got %d", len(opts.TOTPEncryptionKey))
+	}
+
 	return &DbManager{
 		db:               db,
-		bcryptDifficulty: opts.BcryptDifficulty, // set the cost of the difficulty
+		bcryptDifficulty: opts.BcryptDifficulty,
 		defaultEnabled:   opts.DefaultEnabled,
+		usernameFormat:   opts.UsernameFormat,
+		totpEncKey:       opts.TOTPEncryptionKey,
 	}, nil
 }
 
-// userModel is the database representation of the user
+// userModel is the database representation of the user. LoginID is the unique identifier.
 type userModel struct {
 	gorm.Model
-	Email   string `gorm:"uniqueIndex"`
-	Name    string
-	Pw      string
-	Enabled bool
-	// last login
-	// login location
+	LoginID              string `gorm:"uniqueIndex;not null"` // login identifier (may or may not be an email)
+	Name                 string
+	Pw                   string
+	Enabled              bool
+	PrimaryEmail         string
+	PrimaryEmailVerified bool
+	BackupEmail          string
+	BackupEmailVerified  bool
 }
 
-// totpModel stores TOTP secret and enabled flag per user (UserID = email).
+// totpModel stores TOTP secret and enabled flag per user (UserID = login ID).
 type totpModel struct {
 	gorm.Model
 	UserID  string `gorm:"uniqueIndex;not null"`
@@ -70,6 +90,9 @@ type recoveryCodeModel struct {
 }
 
 func (recoveryCodeModel) TableName() string { return "user_recovery_codes" }
+
+// MaxRecoveryCodes is the maximum number of recovery codes allowed per user in SetRecoveryCodes.
+const MaxRecoveryCodes = 6
 
 // emailVerificationCodeModel stores one email verification code per user (user_email_verification_codes table).
 // Replaced on each GenerateEmailVerificationCode.
@@ -114,16 +137,24 @@ const DefaultSMSCodeExpiry = 10 * time.Minute
 // DefaultSMSCodeLength is the number of digits in the generated SMS code.
 const DefaultSMSCodeLength = 6
 
+// User is the input struct for CreateUser (login ID and optional email fields).
 type User struct {
-	Name    string `yaml:"name"`
-	Email   string `yaml:"email"`
-	Pw      string `yaml:"pw"` // or hashed passwd
-	Enabled bool   `yaml:"enabled"`
+	Name                 string `yaml:"name"`
+	LoginID              string `yaml:"login_id"` // unique login identifier (required)
+	Pw                   string `yaml:"pw"`
+	Enabled              bool   `yaml:"enabled"`
+	PrimaryEmail         string `yaml:"primary_email"`
+	PrimaryEmailVerified bool   `yaml:"primary_email_verified"`
+	BackupEmail          string `yaml:"backup_email"`
+	BackupEmailVerified  bool   `yaml:"backup_email_verified"`
 }
 
 func (mng DbManager) Create(id string, pw string) error {
+	if err := userauth.ValidateLoginID(id, mng.usernameFormat); err != nil {
+		return err
+	}
 	usr := User{
-		Email:   id,
+		LoginID: id,
 		Pw:      pw,
 		Enabled: mng.defaultEnabled,
 	}
@@ -131,48 +162,54 @@ func (mng DbManager) Create(id string, pw string) error {
 }
 
 func (mng DbManager) CreateUser(usr User) error {
-
-	if usr.Email == "" {
-		// todo add email structure verifications
-		return errors.New("email cannot be empty")
+	if usr.LoginID == "" {
+		return errors.New("login ID cannot be empty")
 	}
-
 	if usr.Pw == "" {
-		// todo pw length and complexity verification
 		return errors.New("password cannot be empty")
 	}
 
-	// generate bcrypt hashed password
 	hashedPasswd, err := bcrypt.GenerateFromPassword([]byte(usr.Pw), mng.bcryptDifficulty)
 	if err != nil {
 		return err
 	}
 
 	usrModel := userModel{
-		Name:    usr.Name,
-		Email:   usr.Email,
-		Pw:      string(hashedPasswd),
-		Enabled: usr.Enabled,
+		Name:                 usr.Name,
+		LoginID:              usr.LoginID,
+		Pw:                   string(hashedPasswd),
+		Enabled:              usr.Enabled,
+		PrimaryEmail:         usr.PrimaryEmail,
+		PrimaryEmailVerified: usr.PrimaryEmailVerified,
+		BackupEmail:          usr.BackupEmail,
+		BackupEmailVerified:  usr.BackupEmailVerified,
 	}
 
-	mng.db.Create(&usrModel)
-	return nil
+	return mng.db.Create(&usrModel).Error
 }
 
-// GetUser implements userauth.UserGetter. Looks up user by email (id).
+// GetUser implements userauth.UserGetter. Looks up user by login ID.
 func (mng DbManager) GetUser(id string) (userauth.User, error) {
 	var m userModel
-	err := mng.db.First(&m, "email = ?", id).Error
+	err := mng.db.First(&m, "login_id = ?", id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return userauth.User{}, userauth.ErrUserNotFound
 		}
 		return userauth.User{}, err
 	}
-	return userauth.User{Id: m.Email, HashPw: m.Pw, Enabled: m.Enabled}, nil
+	return userauth.User{
+		Id:                   m.LoginID,
+		HashPw:               m.Pw,
+		Enabled:              m.Enabled,
+		PrimaryEmail:         m.PrimaryEmail,
+		PrimaryEmailVerified: m.PrimaryEmailVerified,
+		BackupEmail:          m.BackupEmail,
+		BackupEmailVerified:  m.BackupEmailVerified,
+	}, nil
 }
 
-// GetTOTP implements userauth.TOTPGetter.
+// GetTOTP implements userauth.TOTPGetter. Decrypts the secret if an encryption key is configured.
 func (mng DbManager) GetTOTP(userID string) (userauth.TOTPData, error) {
 	var m totpModel
 	err := mng.db.First(&m, "user_id = ?", userID).Error
@@ -182,21 +219,37 @@ func (mng DbManager) GetTOTP(userID string) (userauth.TOTPData, error) {
 		}
 		return userauth.TOTPData{}, err
 	}
+	secret := m.Secret
+	if mng.totpEncKey != nil && secret != "" {
+		decrypted, err := hashutil.Decrypt(secret, mng.totpEncKey)
+		if err != nil {
+			return userauth.TOTPData{}, fmt.Errorf("decrypt TOTP secret: %w", err)
+		}
+		secret = decrypted
+	}
 	return userauth.TOTPData{
 		Enabled: m.Enabled,
-		Secret:  m.Secret,
+		Secret:  secret,
 	}, nil
 }
 
-// SetTOTP is a store method for configuring TOTP.
+// SetTOTP is a store method for configuring TOTP. Encrypts the secret if an encryption key is configured.
 func (mng DbManager) SetTOTP(userID string, data userauth.TOTPData) error {
 	var m totpModel
 	err := mng.db.First(&m, "user_id = ?", userID).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
+	secret := data.Secret
+	if mng.totpEncKey != nil && secret != "" {
+		encrypted, encErr := hashutil.Encrypt(secret, mng.totpEncKey)
+		if encErr != nil {
+			return fmt.Errorf("encrypt TOTP secret: %w", encErr)
+		}
+		secret = encrypted
+	}
 	m.UserID = userID
-	m.Secret = data.Secret
+	m.Secret = secret
 	m.Enabled = data.Enabled
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return mng.db.Create(&m).Error
@@ -204,37 +257,45 @@ func (mng DbManager) SetTOTP(userID string, data userauth.TOTPData) error {
 	return mng.db.Save(&m).Error
 }
 
-// SetRecoveryCodes is a store method. Replaces all codes for the user.
+// SetRecoveryCodes is a store method. Replaces all codes for the user. Accepts at most MaxRecoveryCodes.
+// Delete and inserts run in a single transaction.
 func (mng DbManager) SetRecoveryCodes(userID string, hashedCodes []string) error {
-	if err := mng.db.Where("user_id = ?", userID).Delete(&recoveryCodeModel{}).Error; err != nil {
-		return err
+	if len(hashedCodes) > MaxRecoveryCodes {
+		return fmt.Errorf("recovery codes: at most %d allowed, got %d", MaxRecoveryCodes, len(hashedCodes))
 	}
-	for _, h := range hashedCodes {
-		if h == "" {
-			continue
-		}
-		if err := mng.db.Create(&recoveryCodeModel{UserID: userID, CodeHash: h}).Error; err != nil {
+	return mng.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Delete(&recoveryCodeModel{}).Error; err != nil {
 			return err
 		}
-	}
-	return nil
+		for _, h := range hashedCodes {
+			if h == "" {
+				continue
+			}
+			if err := tx.Create(&recoveryCodeModel{UserID: userID, CodeHash: h}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
-// VerifyRecoveryCode implements userauth.TOTPGetter. Consumes the code on success.
+// VerifyRecoveryCode implements userauth.RecoveryCodeVerifier. Consumes the code on success.
+// Loads all stored bcrypt hashes for the user and compares against each (max 6 codes).
 func (mng DbManager) VerifyRecoveryCode(userID, code string) (bool, error) {
-	hash := hashutil.HashRecoveryCode(code)
-	var m recoveryCodeModel
-	err := mng.db.Where("user_id = ? AND code_hash = ?", userID, hash).First(&m).Error
+	var codes []recoveryCodeModel
+	err := mng.db.Where("user_id = ?", userID).Find(&codes).Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
+		return false, err
+	}
+	for _, m := range codes {
+		if hashutil.VerifyRecoveryCodeHash(code, m.CodeHash) {
+			if err := mng.db.Delete(&m).Error; err != nil {
+				return false, err
+			}
+			return true, nil
 		}
-		return false, err
 	}
-	if err := mng.db.Delete(&m).Error; err != nil {
-		return false, err
-	}
-	return true, nil
+	return false, nil
 }
 
 // GetRecoveryCodesCount is a store method.
@@ -251,7 +312,7 @@ func (mng DbManager) GenerateEmailVerificationCode(userID string) (code string, 
 		return "", time.Time{}, err
 	}
 	expiresAt = time.Now().UTC().Add(DefaultEmailCodeExpiry)
-	hash := hashutil.HashRecoveryCode(code)
+	hash := hashutil.HashCodeSHA256(code)
 	if err := mng.db.Where("user_id = ?", userID).Delete(&emailVerificationCodeModel{}).Error; err != nil {
 		return "", time.Time{}, err
 	}
@@ -318,7 +379,7 @@ func (mng DbManager) SetEmailCodeEnabled(userID string, enabled bool) error {
 
 // VerifyEmailCode implements userauth.EmailCodeVerifier. Consumes the code on success if not expired.
 func (mng DbManager) VerifyEmailCode(userID, code string) (bool, error) {
-	hash := hashutil.HashRecoveryCode(code)
+	hash := hashutil.HashCodeSHA256(code)
 	var m emailVerificationCodeModel
 	err := mng.db.Where("user_id = ? AND code_hash = ?", userID, hash).First(&m).Error
 	if err != nil {
@@ -344,7 +405,7 @@ func (mng DbManager) GenerateSMSVerificationCode(userID string) (code string, ex
 		return "", time.Time{}, err
 	}
 	expiresAt = time.Now().UTC().Add(DefaultSMSCodeExpiry)
-	hash := hashutil.HashRecoveryCode(code)
+	hash := hashutil.HashCodeSHA256(code)
 	if err := mng.db.Where("user_id = ?", userID).Delete(&smsVerificationCodeModel{}).Error; err != nil {
 		return "", time.Time{}, err
 	}
@@ -384,7 +445,7 @@ func (mng DbManager) SetSMSCodeEnabled(userID string, enabled bool) error {
 
 // VerifySMSCode implements userauth.SMSCodeVerifier. Consumes the code on success if not expired.
 func (mng DbManager) VerifySMSCode(userID, code string) (bool, error) {
-	hash := hashutil.HashRecoveryCode(code)
+	hash := hashutil.HashCodeSHA256(code)
 	var m smsVerificationCodeModel
 	err := mng.db.Where("user_id = ? AND code_hash = ?", userID, hash).First(&m).Error
 	if err != nil {

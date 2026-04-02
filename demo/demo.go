@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/authhandler"
-	"github.com/go-bumbu/userauth/authhandler/basicauth"
-	"github.com/go-bumbu/userauth/authhandler/cookieauth"
-	"github.com/go-bumbu/userauth/authhandler/headerauth"
-	"github.com/go-bumbu/userauth/loginhandler"
+	"github.com/go-bumbu/userauth/handlers/auth/basicauth"
+	"github.com/go-bumbu/userauth/handlers/auth/chain"
+	"github.com/go-bumbu/userauth/handlers/auth/cookieauth"
+	"github.com/go-bumbu/userauth/handlers/auth/headerauth"
+	logincookie "github.com/go-bumbu/userauth/handlers/login"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
@@ -50,7 +50,7 @@ func demoHandler() http.Handler {
 		})
 	})
 	basicAuthHandler := basicauth.NewHandler(loginHandler, "", true, logger)
-	demoAuth1 := authhandler.New([]authhandler.AuthHandler{basicAuthHandler}, logger, nil, nil)
+	demoAuth1 := chain.New([]chain.AuthHandler{basicAuthHandler}, logger, nil, nil)
 	basicProtected.Use(demoAuth1.Middleware)
 
 	// ===============================================
@@ -74,11 +74,12 @@ func demoHandler() http.Handler {
 		SessionDur:    0,
 		MaxSessionDur: 0,
 		MinWriteSpace: 120 * time.Second,
+		Logger:        logger,
 	})
 	if err != nil {
 		panic("error instantiating session manager")
 	}
-	demoAuth2 := authhandler.New([]authhandler.AuthHandler{sessMgr}, logger, nil, nil)
+	demoAuth2 := chain.New([]chain.AuthHandler{sessMgr}, logger, nil, nil)
 	cookieProtected.Use(demoAuth2.Middleware)
 
 	// ===============================================
@@ -88,9 +89,9 @@ func demoHandler() http.Handler {
 		renderTmpl(writer, request, "login.tmpl.html", nil)
 	})
 	r.Path("/login").Methods(http.MethodPost).Handler(
-		loginhandler.FormAuthHandler(sessMgr, loginHandler, "/"))
+		logincookie.FormAuthHandler(sessMgr, &loginHandler, "/"))
 	r.Path("/logout").Handler(
-		loginhandler.LogoutHandler(sessMgr, "/"))
+		logincookie.LogoutHandler(sessMgr, "/"))
 
 	// ===============================================
 	// Header Auth

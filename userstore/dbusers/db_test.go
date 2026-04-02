@@ -63,9 +63,9 @@ func TestCreateUser(t *testing.T) {
 	defer clean()
 
 	err := mng.CreateUser(User{
-		Name:  "test",
-		Email: "test@mail.com",
-		Pw:    "1234",
+		Name:    "test",
+		LoginID: "test@mail.com",
+		Pw:      "1234",
 	})
 
 	if err != nil {
@@ -77,8 +77,8 @@ func TestCreateUser(t *testing.T) {
 	mng.db.First(&got, 1)
 
 	want := userModel{
-		Name:  "test",
-		Email: "test@mail.com",
+		Name:    "test",
+		LoginID: "test@mail.com",
 	}
 
 	if diff := cmp.Diff(want, got, cmpopts.IgnoreFields(userModel{}, "Model", "Pw")); diff != "" {
@@ -91,9 +91,9 @@ func TestLogin(t *testing.T) {
 	defer clean()
 
 	_ = mng.CreateUser(User{
-		Name:  "test",
-		Email: "test@mail.com",
-		Pw:    "1234",
+		Name:    "test",
+		LoginID: "test@mail.com",
+		Pw:      "1234",
 	})
 
 	t.Run("assert correct login", func(t *testing.T) {

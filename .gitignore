@@ -6,4 +6,9 @@
 *.iml
 .idea/
 
+docs/superpowers/
+docs/spec/plans/
 
+cover.html
+cover.out
+coverage.out

@@ -42,9 +42,43 @@ func isErrUnknownAlgorithm(err error) bool {
 }
 
 func TestHashRecoveryCode(t *testing.T) {
+	code := "abcd1234"
+	h1, err := HashRecoveryCode(code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h1 == "" || h1 == code {
+		t.Error("hash should be non-empty and not equal to plain code")
+	}
+	// bcrypt produces different hashes each time (random salt)
+	h2, err := HashRecoveryCode(code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h1 == h2 {
+		t.Error("bcrypt hashes should differ due to random salt")
+	}
+	// Both should verify against the original code
+	if !VerifyRecoveryCodeHash(code, h1) {
+		t.Error("VerifyRecoveryCodeHash should succeed for correct code against h1")
+	}
+	if !VerifyRecoveryCodeHash(code, h2) {
+		t.Error("VerifyRecoveryCodeHash should succeed for correct code against h2")
+	}
+	// Trimmed input should also match
+	if !VerifyRecoveryCodeHash("  "+code+"  ", h1) {
+		t.Error("trimmed code should verify against hash")
+	}
+	// Wrong code should not match
+	if VerifyRecoveryCodeHash("wrong", h1) {
+		t.Error("VerifyRecoveryCodeHash should fail for wrong code")
+	}
+}
+
+func TestHashCodeSHA256(t *testing.T) {
 	code := "abcd-1234"
-	h1 := HashRecoveryCode(code)
-	h2 := HashRecoveryCode(code)
+	h1 := HashCodeSHA256(code)
+	h2 := HashCodeSHA256(code)
 	if h1 != h2 {
 		t.Error("same code should produce same hash")
 	}
@@ -52,7 +86,7 @@ func TestHashRecoveryCode(t *testing.T) {
 		t.Error("hash should be non-empty and not equal to plain code")
 	}
 	// Trimmed input
-	h3 := HashRecoveryCode("  " + code + "  ")
+	h3 := HashCodeSHA256("  " + code + "  ")
 	if h1 != h3 {
 		t.Error("trimmed code should produce same hash")
 	}

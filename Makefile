@@ -21,7 +21,27 @@ license-check: ## check for invalid licenses
 	@go list -m -mod=readonly  -json all  | go-licence-detector -includeIndirect -validate -rules allowedLicenses.json
 
 .PHONY: verify
-verify: test license-check lint benchmark ## run all tests
+verify: test license-check lint benchmark coverage ## run all tests
+
+# Default coverage threshold is 80
+COVERAGE_THRESHOLD ?= 80
+
+.PHONY: coverage
+coverage: ## check code coverage numbers
+	@go test -coverprofile=coverage.out -covermode=atomic ./... > /dev/null; \
+	if [ -f coverage.out ]; then \
+		coverage=$$(go tool cover -func=coverage.out | grep total: | awk '{print $$3}' | sed 's/%//'); \
+		if [ $$(echo "$$coverage < $(COVERAGE_THRESHOLD)" | bc -l) -eq 1 ]; then \
+			echo "❌ Test coverage is below $(COVERAGE_THRESHOLD)%! Actual: $$coverage%"; \
+			exit 1; \
+		else \
+			echo "✅ Test coverage is $$coverage%"; \
+		fi; \
+		rm -f coverage.out; \
+	else \
+		echo "⚠️ No test coverage data found"; \
+		exit 1; \
+	fi
 
 cover-report: ## generate a coverage report
 	go test -covermode=count -coverpkg=./... -coverprofile cover.out  ./...
