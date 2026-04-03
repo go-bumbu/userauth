@@ -1,10 +1,8 @@
 package dbusers
 
 import (
-	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/go-bumbu/userauth"
@@ -124,18 +122,6 @@ type secondFactorFlagsModel struct {
 }
 
 func (secondFactorFlagsModel) TableName() string { return "user_second_factor_flags" }
-
-// DefaultEmailCodeExpiry is the default lifetime of an email verification code.
-const DefaultEmailCodeExpiry = 15 * time.Minute
-
-// DefaultEmailCodeLength is the number of digits in the generated code.
-const DefaultEmailCodeLength = 6
-
-// DefaultSMSCodeExpiry is the default lifetime of an SMS verification code.
-const DefaultSMSCodeExpiry = 10 * time.Minute
-
-// DefaultSMSCodeLength is the number of digits in the generated SMS code.
-const DefaultSMSCodeLength = 6
 
 // User is the input struct for CreateUser (login ID and optional email fields).
 type User struct {
@@ -305,21 +291,12 @@ func (mng DbManager) GetRecoveryCodesCount(userID string) (int, error) {
 	return int(count), err
 }
 
-// GenerateEmailVerificationCode is a store method. Generates a one-time code, stores its hash with expiry, returns the plain code.
-func (mng DbManager) GenerateEmailVerificationCode(userID string) (code string, expiresAt time.Time, err error) {
-	code, err = generateNumericCode(DefaultEmailCodeLength)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	expiresAt = time.Now().UTC().Add(DefaultEmailCodeExpiry)
-	hash := hashutil.HashCodeSHA256(code)
+// StoreEmailCode persists a hashed email verification code, replacing any existing code for the user.
+func (mng DbManager) StoreEmailCode(userID, codeHash string, expiresAt time.Time) error {
 	if err := mng.db.Where("user_id = ?", userID).Delete(&emailVerificationCodeModel{}).Error; err != nil {
-		return "", time.Time{}, err
+		return err
 	}
-	if err := mng.db.Create(&emailVerificationCodeModel{UserID: userID, CodeHash: hash, ExpiresAt: expiresAt}).Error; err != nil {
-		return "", time.Time{}, err
-	}
-	return code, expiresAt, nil
+	return mng.db.Create(&emailVerificationCodeModel{UserID: userID, CodeHash: codeHash, ExpiresAt: expiresAt}).Error
 }
 
 // AvailableSecondFactors implements userauth.SecondFactorProvider.
@@ -398,21 +375,12 @@ func (mng DbManager) VerifyEmailCode(userID, code string) (bool, error) {
 	return true, nil
 }
 
-// GenerateSMSVerificationCode is a store method. Generates a one-time SMS code, stores its hash with expiry, returns the plain code.
-func (mng DbManager) GenerateSMSVerificationCode(userID string) (code string, expiresAt time.Time, err error) {
-	code, err = generateNumericCode(DefaultSMSCodeLength)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	expiresAt = time.Now().UTC().Add(DefaultSMSCodeExpiry)
-	hash := hashutil.HashCodeSHA256(code)
+// StoreSMSCode persists a hashed SMS verification code, replacing any existing code for the user.
+func (mng DbManager) StoreSMSCode(userID, codeHash string, expiresAt time.Time) error {
 	if err := mng.db.Where("user_id = ?", userID).Delete(&smsVerificationCodeModel{}).Error; err != nil {
-		return "", time.Time{}, err
+		return err
 	}
-	if err := mng.db.Create(&smsVerificationCodeModel{UserID: userID, CodeHash: hash, ExpiresAt: expiresAt}).Error; err != nil {
-		return "", time.Time{}, err
-	}
-	return code, expiresAt, nil
+	return mng.db.Create(&smsVerificationCodeModel{UserID: userID, CodeHash: codeHash, ExpiresAt: expiresAt}).Error
 }
 
 // smsCodeEnabled returns whether SMS 2FA is enabled for the user (used by AvailableSecondFactors).
@@ -462,17 +430,4 @@ func (mng DbManager) VerifySMSCode(userID, code string) (bool, error) {
 		return false, err
 	}
 	return true, nil
-}
-
-func generateNumericCode(length int) (string, error) {
-	const digits = "0123456789"
-	b := make([]byte, length)
-	for i := range b {
-		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
-		if err != nil {
-			return "", fmt.Errorf("generate code: %w", err)
-		}
-		b[i] = digits[n.Int64()]
-	}
-	return string(b), nil
 }

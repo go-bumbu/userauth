@@ -151,3 +151,17 @@ func HashCodeSHA256(code string) string {
 	h := sha256.Sum256([]byte(strings.TrimSpace(code)))
 	return hex.EncodeToString(h[:])
 }
+
+// GenerateNumericCode returns a cryptographically random numeric string of the given length.
+func GenerateNumericCode(length int) (string, error) {
+	const digits = "0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
+		if err != nil {
+			return "", fmt.Errorf("generate code: %w", err)
+		}
+		b[i] = digits[n.Int64()]
+	}
+	return string(b), nil
+}

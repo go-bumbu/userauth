@@ -188,6 +188,17 @@ func (m *Manager) LogoutUser(r *http.Request, w http.ResponseWriter) error {
 	return m.write(r, w, session, authData)
 }
 
+// TouchSession renews the rolling session expiry if the session is authenticated and enough
+// time has passed since the last write (MinWriteSpace). Use this in custom handlers that
+// don't use HandleAuth/Middleware but still need session renewal.
+func (m *Manager) TouchSession(r *http.Request, w http.ResponseWriter) error {
+	data, session, err := m.read(r)
+	if err != nil || !data.IsAuthenticated {
+		return err
+	}
+	return m.updateExpiry(data, session, r, w)
+}
+
 func (m *Manager) updateExpiry(data SessionData, session *sessions.Session, r *http.Request, w http.ResponseWriter) error {
 	if data.LastUpdate.Add(m.minWriteSpace).After(time.Now()) {
 		return nil

@@ -291,3 +291,25 @@ func CheckPass(plainPass, hash string) (bool, error) {
 func MustHashPw(pw string) string {
 	return hashutil.MustHashPassword(pw)
 }
+
+// VerificationCodeService generates and stores one-time verification codes (email, SMS).
+// It separates domain logic (code length, expiry, hashing) from storage.
+type VerificationCodeService struct {
+	Store      func(userID, hash string, expiresAt time.Time) error
+	CodeLength int
+	Expiry     time.Duration
+}
+
+// Generate creates a new numeric code, hashes it with SHA-256, stores it, and returns the plain code and expiry.
+func (s *VerificationCodeService) Generate(userID string) (string, time.Time, error) {
+	code, err := hashutil.GenerateNumericCode(s.CodeLength)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expiresAt := time.Now().UTC().Add(s.Expiry)
+	hash := hashutil.HashCodeSHA256(code)
+	if err := s.Store(userID, hash, expiresAt); err != nil {
+		return "", time.Time{}, err
+	}
+	return code, expiresAt, nil
+}

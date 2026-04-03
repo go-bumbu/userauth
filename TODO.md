@@ -1,21 +1,11 @@
 ## Braindump of todos
 
-* create an pluggable authenticator that allows to configure multiple auth mechanisms, e.g. session and api token
 
 ### session handler
 * session http to implement login/logout handlers
 * session admin should allow extra features
 
 ### Authentication
-* user login
-* enable/disable user
-* cookie based session
-* token based session
-* basic auth
-* 2fa
-* email verification
-  * included email server?
-  * external email server ?
 * allow multiple user stores? use-case in db users + predefined static ones
 
 ### register
@@ -99,7 +89,7 @@ Items identified during a full architecture review of the library.
 - [ ] **`PendingLogin` interfaces leak HTTP concerns**
   `SetPendingLogin` takes `*http.Request` and `http.ResponseWriter` that memory and DB implementations ignore.
   The interface is shaped by the cookie implementation, not the domain. Separate storage from HTTP transport.
-- [ ] **Email/SMS code generation lives in `dbusers`**
+- [x] **Email/SMS code generation lives in `dbusers`**
   `GenerateEmailVerificationCode` and `GenerateSMSVerificationCode` are methods on `DbManager`. Code generation
   is domain logic (length, expiry, charset), not storage logic. Move to core or a dedicated service.
 - [ ] **`dbusers` is coupled to GORM**
