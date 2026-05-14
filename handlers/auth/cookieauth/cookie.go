@@ -165,11 +165,11 @@ func (m *Manager) Get(r *http.Request, name string) (*sessions.Session, error) {
 	if err != nil {
 		var multiErr securecookie.MultiError
 		if errors.As(err, &multiErr) {
-			for _, singleErr := range multiErr {
-				if singleErr.Error() == "securecookie: the value is not valid" {
-					return session, nil
-				}
-			}
+			// securecookie wraps all decode failures (bad MAC, expired,
+			// gob type mismatch, etc.) as MultiError. The underlying
+			// store always returns a fresh session alongside the error,
+			// so it is safe to discard the error and use the empty session.
+			return session, nil
 		}
 		return nil, err
 	}
@@ -224,8 +224,14 @@ func (m *Manager) GetSessData(r *http.Request) (SessionData, error) {
 func (m *Manager) read(r *http.Request) (SessionData, *sessions.Session, error) {
 	session, err := m.Get(r, m.cookieName)
 	if err != nil {
-		m.logger.Debug("session read: error getting session from store", "cookie", m.cookieName, "error", err)
-		return SessionData{}, nil, err
+		// Cookie is corrupt or contains types from an old build;
+		// treat it as "no session" rather than returning a 500.
+		m.logger.Debug("session read: discarding undecodable cookie", "cookie", m.cookieName, "error", err)
+		if session == nil {
+			return SessionData{}, nil, nil
+		}
+		session.Values = nil
+		return SessionData{}, session, nil
 	}
 	key := session.Values[sessionDataKey]
 	if key == nil {

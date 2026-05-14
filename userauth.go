@@ -118,6 +118,14 @@ type UserRegistrar interface {
 	Create(id string, pw string) error
 }
 
+// UserUpdater can update user fields (email, enabled state). Stores that support
+// user profile management implement this.
+type UserUpdater interface {
+	SetPrimaryEmail(userID, email string) error
+	SetPrimaryEmailVerified(userID string, verified bool) error
+	SetEnabled(userID string, enabled bool) error
+}
+
 // TOTPConfigurator can read and write TOTP for a user. Stores that support TOTP setup/disable implement this.
 type TOTPConfigurator interface {
 	TOTPGetter

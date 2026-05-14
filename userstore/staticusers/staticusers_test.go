@@ -77,3 +77,116 @@ func TestUserFromFile(t *testing.T) {
 	})
 
 }
+
+func TestAvailableSecondFactors(t *testing.T) {
+	users, err := FromFile("testdata/users.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tcs := []struct {
+		name   string
+		userID string
+		want   []userauth.SecondFactor
+	}{
+		{
+			name:   "no 2FA configured",
+			userID: "demo",
+			want:   nil,
+		},
+		{
+			name:   "email only",
+			userID: "alice",
+			want:   []userauth.SecondFactor{userauth.SecondFactorEmail},
+		},
+		{
+			name:   "totp only",
+			userID: "bob",
+			want:   []userauth.SecondFactor{userauth.SecondFactorTOTP},
+		},
+		{
+			name:   "both email and totp",
+			userID: "carol",
+			want:   []userauth.SecondFactor{userauth.SecondFactorTOTP, userauth.SecondFactorEmail},
+		},
+		{
+			name:   "unknown user",
+			userID: "nobody",
+			want:   nil,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := users.AvailableSecondFactors(tc.userID)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(got, tc.want); diff != "" {
+				t.Errorf("unexpected value (-got +want)\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGetTOTP(t *testing.T) {
+	users, err := FromFile("testdata/users.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tcs := []struct {
+		name   string
+		userID string
+		want   userauth.TOTPData
+	}{
+		{
+			name:   "user with TOTP secret",
+			userID: "bob",
+			want:   userauth.TOTPData{Enabled: true, Secret: "JBSWY3DPEHPK3PXP"},
+		},
+		{
+			name:   "user without TOTP",
+			userID: "demo",
+			want:   userauth.TOTPData{Enabled: false, Secret: ""},
+		},
+		{
+			name:   "unknown user",
+			userID: "nobody",
+			want:   userauth.TOTPData{Enabled: false},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := users.GetTOTP(tc.userID)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(got, tc.want); diff != "" {
+				t.Errorf("unexpected value (-got +want)\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGetUser_Email2FA(t *testing.T) {
+	users, err := FromFile("testdata/users.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := users.GetUser("alice")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := userauth.User{
+		Id:           "alice",
+		HashPw:       "alice",
+		Enabled:      true,
+		PrimaryEmail: "alice@example.com",
+	}
+	if diff := cmp.Diff(got, want); diff != "" {
+		t.Errorf("unexpected value (-got +want)\n%s", diff)
+	}
+}

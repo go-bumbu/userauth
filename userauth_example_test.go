@@ -54,15 +54,13 @@ func Example_usrauth_CanLogin() {
 
 func Example_usrauth_TOTP() {
 	// Static user store with TOTP defined per user (hardcoded here; same fields can be in YAML/JSON).
-	// base32 example; in production use totp.Generate()
 	const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- example TOTP secret
 	users := &staticusers.Users{
 		Users: []staticusers.User{{
-			Id:          "totpuser",
-			HashPw:      userauth.MustHashPw("password"),
-			Enabled:     true,
-			TOTPEnabled: true,
-			TOTPSecret:  secret,
+			Id:         "totpuser",
+			HashPw:     userauth.MustHashPw("password"),
+			Enabled:    true,
+			TOTPSecret: secret,
 		}},
 	}
 

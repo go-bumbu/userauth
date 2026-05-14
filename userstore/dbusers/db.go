@@ -17,6 +17,7 @@ var (
 	_ userauth.RecoveryCodeConfigurator = (*DbManager)(nil)
 	_ userauth.RecoveryCodeVerifier     = (*DbManager)(nil)
 	_ userauth.RecoveryCodeCountGetter  = (*DbManager)(nil)
+	_ userauth.UserUpdater              = (*DbManager)(nil)
 )
 
 // DbManager is an opinionated user manager that stores the information on a gorm database
@@ -39,7 +40,7 @@ type ManagerOpts struct {
 func NewDbManager(db *gorm.DB, opts ManagerOpts) (*DbManager, error) {
 
 	// Migrate the schema
-	err := db.AutoMigrate(&userModel{}, &totpModel{}, &recoveryCodeModel{}, &emailVerificationCodeModel{}, &smsVerificationCodeModel{}, &secondFactorFlagsModel{})
+	err := db.AutoMigrate(&userModel{}, &totpModel{}, &recoveryCodeModel{}, &emailVerificationCodeModel{}, &smsVerificationCodeModel{}, &secondFactorFlagsModel{}, &pendingEmailChangeModel{})
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +124,17 @@ type secondFactorFlagsModel struct {
 
 func (secondFactorFlagsModel) TableName() string { return "user_second_factor_flags" }
 
+// pendingEmailChangeModel stores a pending email change awaiting code verification.
+type pendingEmailChangeModel struct {
+	gorm.Model
+	UserID    string    `gorm:"uniqueIndex;not null"`
+	NewEmail  string    `gorm:"not null"`
+	CodeHash  string    `gorm:"not null"`
+	ExpiresAt time.Time `gorm:"not null"`
+}
+
+func (pendingEmailChangeModel) TableName() string { return "user_pending_email_changes" }
+
 // User is the input struct for CreateUser (login ID and optional email fields).
 type User struct {
 	Name                 string `yaml:"name"`
@@ -164,6 +176,31 @@ func (mng DbManager) CreateUser(usr User) error {
 		Name:                 usr.Name,
 		LoginID:              usr.LoginID,
 		Pw:                   string(hashedPasswd),
+		Enabled:              usr.Enabled,
+		PrimaryEmail:         usr.PrimaryEmail,
+		PrimaryEmailVerified: usr.PrimaryEmailVerified,
+		BackupEmail:          usr.BackupEmail,
+		BackupEmailVerified:  usr.BackupEmailVerified,
+	}
+
+	return mng.db.Create(&usrModel).Error
+}
+
+// CreateUserWithHashedPassword creates a user with a pre-hashed password.
+// Unlike CreateUser, this does not hash the password - it stores it directly.
+// Use this when provisioning users with passwords that are already bcrypt hashed.
+func (mng DbManager) CreateUserWithHashedPassword(usr User) error {
+	if usr.LoginID == "" {
+		return errors.New("login ID cannot be empty")
+	}
+	if usr.Pw == "" {
+		return errors.New("password cannot be empty")
+	}
+
+	usrModel := userModel{
+		Name:                 usr.Name,
+		LoginID:              usr.LoginID,
+		Pw:                   usr.Pw,
 		Enabled:              usr.Enabled,
 		PrimaryEmail:         usr.PrimaryEmail,
 		PrimaryEmailVerified: usr.PrimaryEmailVerified,
@@ -430,4 +467,84 @@ func (mng DbManager) VerifySMSCode(userID, code string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// SetPrimaryEmail updates the primary email for a user. Resets PrimaryEmailVerified to false.
+func (mng DbManager) SetPrimaryEmail(userID, email string) error {
+	return mng.db.Model(&userModel{}).Where("login_id = ?", userID).
+		Updates(map[string]interface{}{
+			"primary_email":          email,
+			"primary_email_verified": false,
+		}).Error
+}
+
+// SetPrimaryEmailVerified sets the primary email verified flag for a user.
+func (mng DbManager) SetPrimaryEmailVerified(userID string, verified bool) error {
+	return mng.db.Model(&userModel{}).Where("login_id = ?", userID).
+		Update("primary_email_verified", verified).Error
+}
+
+// SetEnabled sets the enabled flag for a user.
+func (mng DbManager) SetEnabled(userID string, enabled bool) error {
+	return mng.db.Model(&userModel{}).Where("login_id = ?", userID).
+		Update("enabled", enabled).Error
+}
+
+// SetPasswordHash updates the password hash for an existing user.
+// The hash should be a valid bcrypt hash. This method does not hash the input.
+func (mng DbManager) SetPasswordHash(userID, hashedPw string) error {
+	return mng.db.Model(&userModel{}).Where("login_id = ?", userID).
+		Update("pw", hashedPw).Error
+}
+
+// StorePendingEmailChange stores a pending email change, replacing any existing one for the user.
+func (mng DbManager) StorePendingEmailChange(userID, newEmail, codeHash string, expiresAt time.Time) error {
+	if err := mng.db.Where("user_id = ?", userID).Delete(&pendingEmailChangeModel{}).Error; err != nil {
+		return err
+	}
+	return mng.db.Create(&pendingEmailChangeModel{
+		UserID:    userID,
+		NewEmail:  newEmail,
+		CodeHash:  codeHash,
+		ExpiresAt: expiresAt,
+	}).Error
+}
+
+// GetPendingEmailChange returns the pending email change for a user, if any and not expired.
+func (mng DbManager) GetPendingEmailChange(userID string) (newEmail string, err error) {
+	var m pendingEmailChangeModel
+	err = mng.db.Where("user_id = ?", userID).First(&m).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", fmt.Errorf("no pending email change")
+		}
+		return "", err
+	}
+	if time.Now().UTC().After(m.ExpiresAt) {
+		_ = mng.db.Delete(&m).Error
+		return "", fmt.Errorf("pending email change expired")
+	}
+	return m.NewEmail, nil
+}
+
+// VerifyPendingEmailChange verifies the code for a pending email change and returns the new email.
+// Consumes the pending change on success.
+func (mng DbManager) VerifyPendingEmailChange(userID, code string) (newEmail string, err error) {
+	hash := hashutil.HashCodeSHA256(code)
+	var m pendingEmailChangeModel
+	err = mng.db.Where("user_id = ? AND code_hash = ?", userID, hash).First(&m).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", fmt.Errorf("invalid code")
+		}
+		return "", err
+	}
+	if time.Now().UTC().After(m.ExpiresAt) {
+		_ = mng.db.Delete(&m).Error
+		return "", fmt.Errorf("code expired")
+	}
+	if err := mng.db.Delete(&m).Error; err != nil {
+		return "", err
+	}
+	return m.NewEmail, nil
 }

@@ -125,3 +125,68 @@ func TestLogin(t *testing.T) {
 		}
 	})
 }
+
+func TestCreateUserWithHashedPassword(t *testing.T) {
+	mng := setup(t)
+	defer clean()
+
+	hashedPw, err := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = mng.CreateUserWithHashedPassword(User{
+		LoginID: "alice",
+		Pw:      string(hashedPw),
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	got, err := mng.GetUser("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := hashutil.VerifyPassword("secret", got.HashPw)
+	if err != nil || !ok {
+		t.Errorf("password verification failed: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestSetPasswordHash(t *testing.T) {
+	mng := setup(t)
+	defer clean()
+
+	err := mng.Create("bob", "original")
+	if err != nil {
+		t.Fatalf("unexpected error creating user: %s", err)
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte("updated"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = mng.SetPasswordHash("bob", string(newHash))
+	if err != nil {
+		t.Fatalf("unexpected error setting password hash: %s", err)
+	}
+
+	got, err := mng.GetUser("bob")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := hashutil.VerifyPassword("updated", got.HashPw)
+	if err != nil || !ok {
+		t.Errorf("password verification with new hash failed: ok=%v err=%v", ok, err)
+	}
+
+	// Verify old password no longer works
+	ok, _ = hashutil.VerifyPassword("original", got.HashPw)
+	if ok {
+		t.Errorf("old password should not verify after hash update")
+	}
+}
