@@ -27,7 +27,7 @@ func TestUserMgmtList(t *testing.T) {
 
 func TestUserMgmtCreate(t *testing.T) {
 	handler := userMgmtDemo()
-	form := url.Values{"login": {"testcreate"}, "password": {"secret"}}
+	form := url.Values{"login": {"uniquecreatetest"}, "password": {"secret"}}
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()

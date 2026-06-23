@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-bumbu/userauth/userstore/dbusers"
 	"github.com/gorilla/mux"
@@ -74,6 +75,10 @@ func usersListWithMsg(w http.ResponseWriter, r *http.Request, msg string) {
 func usersCreateHandler(w http.ResponseWriter, r *http.Request) {
 	login := r.FormValue("login")
 	password := r.FormValue("password")
+	if strings.TrimSpace(login) == "" || strings.TrimSpace(password) == "" {
+		usersListWithMsg(w, r, "Error: login and password are required")
+		return
+	}
 	if err := dbUserMgr.Create(login, password); err != nil {
 		usersListWithMsg(w, r, "Error: "+err.Error())
 		return
