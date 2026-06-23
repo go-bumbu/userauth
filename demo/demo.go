@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/handlers/auth/basicauth"
 	"github.com/go-bumbu/userauth/handlers/auth/chain"
 	"github.com/go-bumbu/userauth/handlers/auth/cookieauth"
 	"github.com/go-bumbu/userauth/handlers/auth/headerauth"
@@ -41,17 +40,9 @@ func demoHandler() http.Handler {
 	}
 
 	// ===============================================
-	// Basicauth
+	// Basicauth — see basicauth.go
 	// ===============================================
-	basicProtected := r.Path("/basic").Methods(http.MethodGet).Subrouter()
-	basicProtected.HandleFunc("", func(writer http.ResponseWriter, request *http.Request) {
-		renderTmpl(writer, request, "protected.tmpl.html", map[string]any{
-			"text": "content protected by basicauth only",
-		})
-	})
-	basicAuthHandler := basicauth.NewHandler(loginHandler, "", true, logger)
-	demoAuth1 := chain.New([]chain.AuthHandler{basicAuthHandler}, logger, nil, nil)
-	basicProtected.Use(demoAuth1.Middleware)
+	r.PathPrefix("/basic/").Handler(http.StripPrefix("/basic", basicAuthDemo()))
 
 	// ===============================================
 	// cookie based session authentication
@@ -159,6 +150,12 @@ func renderTmpl(w http.ResponseWriter, r *http.Request, file string, data map[st
 		return
 	}
 
+}
+
+func protectedPage(text string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		renderTmpl(w, r, "protected.tmpl.html", map[string]any{"text": text})
+	})
 }
 
 func faviconHandler(w http.ResponseWriter, r *http.Request) {
