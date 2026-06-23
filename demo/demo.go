@@ -2,7 +2,6 @@ package main
 
 import (
 	"embed"
-	"fmt"
 	"html/template"
 	"io"
 	"net/http"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/handlers/auth/headerauth"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 	"github.com/gorilla/mux"
 )
@@ -41,20 +39,9 @@ func demoHandler() http.Handler {
 	r.PathPrefix("/cookie/").Handler(http.StripPrefix("/cookie", cookieAuthDemo()))
 
 	// ===============================================
-	// Header Auth
+	// Header auth — see headerauth.go
 	// ===============================================
-
-	hauth := headerauth.New(headerauth.UserAuthHeader, true, logger)
-
-	headerProtected := r.Path("/header-protected").Methods(http.MethodGet).Subrouter()
-	headerProtected.HandleFunc("", func(writer http.ResponseWriter, request *http.Request) {
-		data := hauth.GetData(request)
-		renderTmpl(writer, request, "protected.tmpl.html", map[string]any{
-			"text": fmt.Sprintf("content protected by the presence of the header X-User-Auth with value: %s", data.UserName),
-		})
-	})
-
-	headerProtected.Use(hauth.Middleware)
+	r.PathPrefix("/header/").Handler(http.StripPrefix("/header", headerAuthDemo()))
 
 	// ===============================================
 	// rest of the pages
