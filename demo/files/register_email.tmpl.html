@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Email Registration</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3>Email Registration</h3>
+<p class="info" style="text-align:center;">
+    A 6-digit verification code will be shown on the next page,
+    simulating an email delivery.
+</p>
+
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+
+<form class="login-form" method="POST" action="/register/email">
+    <label for="email">Email address</label>
+    <input type="email" id="email" name="email" value="{{.Email}}" autocomplete="email" required>
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autocomplete="new-password" required>
+
+    <label for="confirm">Confirm password</label>
+    <input type="password" id="confirm" name="confirm" autocomplete="new-password" required>
+
+    <button type="submit">Send verification code</button>
+</form>
+
+<p><a href="/?tab=users">← Back</a></p>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>My Profile</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3>My Profile</h3>
+
+{{if .Success}}
+<p class="info" style="color:#2a7a2a; font-style:normal; text-align:center;">{{.Success}}</p>
+{{end}}
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+
+<ul>
+    <li><strong>Username:</strong> {{.UserID}}</li>
+    <li><strong>Email:</strong> {{if .Email}}{{.Email}}{{else}}<em>not set</em>{{end}}</li>
+    <li><strong>Status:</strong> {{if .Enabled}}Enabled{{else}}Disabled{{end}}</li>
+</ul>
+
+<p>Change Password</p>
+<form class="login-form" method="POST" action="/profile/change-password">
+    <label for="current_password">Current password</label>
+    <input type="password" id="current_password" name="current_password" autocomplete="current-password" required>
+
+    <label for="new_password">New password</label>
+    <input type="password" id="new_password" name="new_password" autocomplete="new-password" required>
+
+    <label for="confirm_password">Confirm new password</label>
+    <input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" required>
+
+    <button type="submit">Update password</button>
+</form>
+
+<p>Change Email</p>
+<form class="login-form" method="POST" action="/profile/change-email">
+    <label for="email">Email address</label>
+    <input type="email" id="email" name="email" value="{{.Email}}" autocomplete="email">
+
+    <button type="submit">Update email</button>
+</form>
+
+<p><a href="/profile/logout">Logout</a> &nbsp;·&nbsp; <a href="/?tab=users">← Back</a></p>
+</body>
+</html>

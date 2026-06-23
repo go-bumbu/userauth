@@ -43,9 +43,26 @@ func demoHandler() http.Handler {
 	r.PathPrefix("/header/").Handler(http.StripPrefix("/header", headerAuthDemo()))
 
 	// ===============================================
+	// Passwordless email-code login — see emailcode.go
+	// ===============================================
+	r.PathPrefix("/emailcode/").Handler(http.StripPrefix("/emailcode", emailCodeDemo()))
+
+	// ===============================================
 	// User management — see usermgmt.go
 	// ===============================================
 	r.PathPrefix("/users/").Handler(http.StripPrefix("/users", userMgmtDemo()))
+
+	// ===============================================
+	// User registration — see register.go, register_email.go
+	// ===============================================
+	r.Path("/register").Methods(http.MethodGet, http.MethodPost).HandlerFunc(registerHandler)
+	r.Path("/register/email").Methods(http.MethodGet, http.MethodPost).HandlerFunc(registerEmailHandler)
+	r.Path("/register/email/verify").Methods(http.MethodGet, http.MethodPost).HandlerFunc(registerEmailVerifyHandler)
+
+	// ===============================================
+	// User profile (self-service) — see profile.go
+	// ===============================================
+	r.PathPrefix("/profile/").Handler(http.StripPrefix("/profile", profileDemo()))
 
 	// ===============================================
 	// rest of the pages
