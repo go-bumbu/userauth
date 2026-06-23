@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Management Demo</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3><a href="/">Home</a></h3>
+<h4>User Management (in-memory SQLite)</h4>
+
+{{if .Msg}}<p class="error">{{.Msg}}</p>{{end}}
+
+<table class="user-table">
+    <thead>
+        <tr>
+            <th>Login ID</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {{range .Users}}
+        <tr>
+            <td>{{.ID}}</td>
+            <td>{{if .Enabled}}enabled{{else}}disabled{{end}}</td>
+            <td>
+                <form method="POST" action="/users/{{.ID}}/enable" style="display:inline">
+                    <button type="submit">Enable</button>
+                </form>
+                <form method="POST" action="/users/{{.ID}}/disable" style="display:inline">
+                    <button type="submit">Disable</button>
+                </form>
+            </td>
+        </tr>
+    {{end}}
+    </tbody>
+</table>
+
+<h4>Create User</h4>
+<form method="POST" action="/users/" class="login-form">
+    <label for="login">Login ID</label>
+    <input id="login" type="text" name="login" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" name="password" required>
+    <button type="submit">Create User</button>
+</form>
+</body>
+</html>

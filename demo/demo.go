@@ -43,6 +43,11 @@ func demoHandler() http.Handler {
 	r.PathPrefix("/header/").Handler(http.StripPrefix("/header", headerAuthDemo()))
 
 	// ===============================================
+	// User management — see usermgmt.go
+	// ===============================================
+	r.PathPrefix("/users/").Handler(http.StripPrefix("/users", userMgmtDemo()))
+
+	// ===============================================
 	// rest of the pages
 	// ===============================================
 
