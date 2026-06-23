@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/handlers/auth/chain"
 	"github.com/go-bumbu/userauth/handlers/auth/cookieauth"
 	logincookie "github.com/go-bumbu/userauth/handlers/login"
 	"github.com/gorilla/mux"
@@ -36,8 +35,7 @@ func cookieAuthDemo() http.Handler {
 
 	protected := r.Path("/protected").Methods(http.MethodGet).Subrouter()
 	protected.Handle("", protectedPage("content protected by session cookie"))
-	cookieAuth := chain.New([]chain.AuthHandler{sessMgr}, logger, nil, nil)
-	protected.Use(cookieAuth.Middleware)
+	protected.Use(sessMgr.Middleware)
 
 	r.Path("/login").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		renderTmpl(w, r, "login.tmpl.html", nil)
