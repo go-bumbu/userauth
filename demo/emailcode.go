@@ -75,9 +75,77 @@ func emailCodeDemo() http.Handler {
 		renderTmpl(w, req, "emailcode_login.tmpl.html", map[string]any{"Emails": emailCodeLoginAddresses()})
 	})
 	r.Path("/login").Methods(http.MethodPost).HandlerFunc(emailCodeRequestHandler)
+
+	// Note: VerifyEmailCode only consults EmailCode, not UserStore — the allow-list
+	// and Enabled gate is enforced at POST /login (a code is only ever issued to an
+	// allow-listed, enabled email). UserStore is set only to satisfy the handler shape.
+	login := userauth.LoginHandler{UserStore: &emailCodeUsers, EmailCode: emailLoginCodeStore}
+
+	r.Path("/login/verify").Methods(http.MethodGet).HandlerFunc(emailCodeVerifyGetHandler)
+	r.Path("/login/verify").Methods(http.MethodPost).HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		emailCodeVerifyPostHandler(w, req, &login, sessMgr)
+	})
+
+	protected := r.Path("/protected").Methods(http.MethodGet).Subrouter()
+	protected.Handle("", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		ud, err := cookieauth.CtxGetUserData(req)
+		if err != nil {
+			http.Error(w, "session error", http.StatusInternalServerError)
+			return
+		}
+		renderTmpl(w, req, "protected.tmpl.html", map[string]any{
+			"text": fmt.Sprintf("logged in passwordlessly as: %s", ud.UserId),
+		})
+	}))
+	protected.Use(sessMgr.Middleware)
+
 	r.Path("/logout").Handler(logincookie.LogoutHandler(sessMgr, "/"))
 
 	return r
+}
+
+func emailCodeVerifyGetHandler(w http.ResponseWriter, r *http.Request) {
+	email := strings.TrimSpace(r.URL.Query().Get("email"))
+	pendingEmailLogins.mu.Lock()
+	pending, exists := pendingEmailLogins.items[email]
+	pendingEmailLogins.mu.Unlock()
+	data := map[string]any{"Email": email}
+	if exists {
+		data["PlainCode"] = pending.plainCode
+	}
+	renderTmpl(w, r, "emailcode_verify.tmpl.html", data)
+}
+
+func emailCodeVerifyPostHandler(w http.ResponseWriter, r *http.Request, login *userauth.LoginHandler, sessMgr *cookieauth.Manager) {
+	email := strings.TrimSpace(r.FormValue("email"))
+	code := strings.TrimSpace(r.FormValue("code"))
+
+	renderErr := func(msg string) {
+		pendingEmailLogins.mu.Lock()
+		pending, exists := pendingEmailLogins.items[email]
+		pendingEmailLogins.mu.Unlock()
+		data := map[string]any{"Email": email, "Error": msg}
+		if exists {
+			data["PlainCode"] = pending.plainCode
+		}
+		renderTmpl(w, r, "emailcode_verify.tmpl.html", data)
+	}
+
+	result, err := login.VerifyEmailCode(email, code)
+	if err != nil || !result.Authenticated {
+		renderErr("Invalid or expired login code.")
+		return
+	}
+
+	pendingEmailLogins.mu.Lock()
+	delete(pendingEmailLogins.items, email)
+	pendingEmailLogins.mu.Unlock()
+
+	if err := sessMgr.LoginUser(r, w, email, false); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/emailcode/protected", http.StatusSeeOther)
 }
 
 func emailCodeRequestHandler(w http.ResponseWriter, r *http.Request) {
