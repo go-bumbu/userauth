@@ -11,13 +11,9 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/handlers/auth/chain"
-	"github.com/go-bumbu/userauth/handlers/auth/cookieauth"
 	"github.com/go-bumbu/userauth/handlers/auth/headerauth"
-	logincookie "github.com/go-bumbu/userauth/handlers/login"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 	"github.com/gorilla/mux"
-	"github.com/gorilla/securecookie"
 )
 
 //go:embed files/*
@@ -34,55 +30,15 @@ func demoHandler() http.Handler {
 
 	r := mux.NewRouter()
 
-	// login handler uses a user store to handle loging
-	loginHandler := userauth.LoginHandler{
-		UserStore: &demoUsers,
-	}
-
 	// ===============================================
 	// Basicauth — see basicauth.go
 	// ===============================================
 	r.PathPrefix("/basic/").Handler(http.StripPrefix("/basic", basicAuthDemo()))
 
 	// ===============================================
-	// cookie based session authentication
+	// Cookie session — see cookieauth.go
 	// ===============================================
-	cookieProtected := r.Path("/cookie-protected").Methods(http.MethodGet).Subrouter()
-	cookieProtected.HandleFunc("", func(writer http.ResponseWriter, request *http.Request) {
-		renderTmpl(writer, request, "protected.tmpl.html", map[string]any{
-			"text": "content protected by session cookie",
-		})
-	})
-
-	sesStore, err := cookieauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
-	if err != nil {
-		panic(fmt.Errorf("error instantiating cookie store: %v", err))
-	}
-
-	sessMgr, err := cookieauth.New(cookieauth.Cfg{
-		Store:         sesStore,
-		AllowRenew:    true,
-		SessionDur:    0,
-		MaxSessionDur: 0,
-		MinWriteSpace: 120 * time.Second,
-		Logger:        logger,
-	})
-	if err != nil {
-		panic("error instantiating session manager")
-	}
-	demoAuth2 := chain.New([]chain.AuthHandler{sessMgr}, logger, nil, nil)
-	cookieProtected.Use(demoAuth2.Middleware)
-
-	// ===============================================
-	// session login/logout
-	// ===============================================
-	r.Path("/login").Methods(http.MethodGet).HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		renderTmpl(writer, request, "login.tmpl.html", nil)
-	})
-	r.Path("/login").Methods(http.MethodPost).Handler(
-		logincookie.FormAuthHandler(sessMgr, &loginHandler, "/"))
-	r.Path("/logout").Handler(
-		logincookie.LogoutHandler(sessMgr, "/"))
+	r.PathPrefix("/cookie/").Handler(http.StripPrefix("/cookie", cookieAuthDemo()))
 
 	// ===============================================
 	// Header Auth

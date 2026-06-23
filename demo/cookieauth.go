@@ -1,0 +1,55 @@
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/handlers/auth/chain"
+	"github.com/go-bumbu/userauth/handlers/auth/cookieauth"
+	logincookie "github.com/go-bumbu/userauth/handlers/login"
+	"github.com/gorilla/mux"
+	"github.com/gorilla/securecookie"
+)
+
+// sessMgr is the package-level session manager; demo.go's index handler reads it.
+var sessMgr *cookieauth.Manager
+
+func cookieAuthDemo() http.Handler {
+	r := mux.NewRouter()
+	login := userauth.LoginHandler{UserStore: &demoUsers}
+
+	sesStore, err := cookieauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
+	if err != nil {
+		panic(fmt.Errorf("error instantiating cookie store: %v", err))
+	}
+
+	var err2 error
+	sessMgr, err2 = cookieauth.New(cookieauth.Cfg{
+		Store:         sesStore,
+		AllowRenew:    true,
+		SessionDur:    0,
+		MaxSessionDur: 0,
+		MinWriteSpace: 120 * time.Second,
+		Logger:        logger,
+	})
+	if err2 != nil {
+		panic("error instantiating session manager")
+	}
+
+	protected := r.Path("/protected").Methods(http.MethodGet).Subrouter()
+	protected.Handle("", protectedPage("content protected by session cookie"))
+	cookieAuth := chain.New([]chain.AuthHandler{sessMgr}, logger, nil, nil)
+	protected.Use(cookieAuth.Middleware)
+
+	r.Path("/login").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		renderTmpl(w, r, "login.tmpl.html", nil)
+	})
+	r.Path("/login").Methods(http.MethodPost).Handler(
+		logincookie.FormAuthHandler(sessMgr, &login, "/cookie/protected"))
+	r.Path("/logout").Handler(
+		logincookie.LogoutHandler(sessMgr, "/"))
+
+	return r
+}
