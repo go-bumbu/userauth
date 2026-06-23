@@ -3,12 +3,13 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
 func TestMain(m *testing.M) {
 	initLogger()
-	m.Run()
+	os.Exit(m.Run())
 }
 
 func TestBasicAuthEnforce(t *testing.T) {
