@@ -6,7 +6,7 @@
 </head>
 <body>
 <h3>Authenticator demo</h3>
-<p>Users: <i>admin:admin</i> or <i>demo:demo</i></p>
+<p>Static users (no database): <i>admin:admin</i> or <i>demo:demo</i></p>
 
 <p>Basic Auth</p>
 <ul>
@@ -14,8 +14,8 @@
         Verifies credentials on every request via the Authorization header.
         No session is created.
     </p>
-    <li><a href="/basic/enforce">/basic/enforce</a> — browser prompts for credentials when not authenticated</li>
-    <li><a href="/basic/silent">/basic/silent</a> — returns 401 silently, no browser prompt</li>
+    <li><a href="/basic/enforce">/basic/enforce</a> - browser prompts for credentials when not authenticated</li>
+    <li><a href="/basic/silent">/basic/silent</a> - returns 401 silently, no browser prompt, if not credentials are provided</li>
 </ul>
 
 <p>Session Cookie</p>
@@ -23,9 +23,9 @@
     <p class="info">
         Login creates an encrypted session cookie. Protected pages check the cookie.
     </p>
-    <li><a href="/cookie/login">/cookie/login</a> — login form</li>
-    <li><a href="/cookie/protected">/cookie/protected</a> — cookie-protected page</li>
-    <li><a href="/cookie/logout">/cookie/logout</a> — logout</li>
+    <li><a href="/cookie/login">/cookie/login</a> - login form (JSON endpoint is also supported)</li>
+    <li><a href="/cookie/protected">/cookie/protected</a> - cookie-protected page</li>
+    <li><a href="/cookie/logout">/cookie/logout</a> - logout (invalidate the cookie)</li>
 </ul>
 
 <p>HTTP Header</p>
@@ -36,7 +36,16 @@
     <p class="info">
         Test with: <code>curl -H "X-User-Auth: demo" http://localhost:8084/header/protected</code>
     </p>
-    <li><a href="/header/protected">/header/protected</a> — header-protected page</li>
+    <li><a href="/header/protected">/header/protected</a> - header-protected page</li>
+</ul>
+
+<p>User Management</p>
+<ul>
+    <p class="info">
+        Create users and toggle their enabled state.
+        Backed by a DbManager with an in-memory SQLite database — data resets on every server restart.
+    </p>
+    <li><a href="/users/">/users/</a> - list, create, enable/disable users</li>
 </ul>
 
 </body>
