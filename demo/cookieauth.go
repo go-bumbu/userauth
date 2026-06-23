@@ -13,7 +13,8 @@ import (
 	"github.com/gorilla/securecookie"
 )
 
-// sessMgr is the package-level session manager; demo.go's index handler reads it.
+// sessMgr is set by cookieAuthDemo(); demo.go's index handler reads it.
+// TODO(task-4): revert to local var once index handler is cleaned up.
 var sessMgr *cookieauth.Manager
 
 func cookieAuthDemo() http.Handler {
