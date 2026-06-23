@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
@@ -53,23 +52,7 @@ func demoHandler() http.Handler {
 	r.Path("/favicon.ico").Methods(http.MethodGet).HandlerFunc(faviconHandler)
 
 	r.Path("/").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sessData, err := sessMgr.GetSessData(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		expire := time.Until(sessData.Expiration).Round(time.Second).String()
-		forceExpire := time.Until(sessData.Expiration).Round(time.Second).String()
-
-		data := map[string]any{
-			"LoggedIn":     sessData.IsAuthenticated,
-			"user":         sessData.UserId,
-			"expiration":   expire,
-			"forceExpire":  forceExpire,
-			"sessionRenew": sessData.RenewExpiration,
-		}
-		renderTmpl(w, r, "index.tmpl.html", data)
+		renderTmpl(w, r, "index.tmpl.html", nil)
 	})
 	return r
 }

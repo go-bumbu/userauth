@@ -2,73 +2,41 @@
 <html>
 <head>
     <title>User authentication demo</title>
-    <link rel="stylesheet" type="text/css" href="styles.css">
+    <link rel="stylesheet" type="text/css" href="/styles.css">
 </head>
-<style>
-
-</style>
 <body>
 <h3>Authenticator demo</h3>
-<p>{{ .Message }}</p>
+<p>Users: <i>admin:admin</i> or <i>demo:demo</i></p>
 
-<p>Basicauth</p>
+<p>Basic Auth</p>
 <ul>
     <p class="info">
-        This demo uses a static user provider, to verify the user/password combination,but a database could also be used.
-    <br>
-        the authentication is then performed using basicauth headers.
+        Verifies credentials on every request via the Authorization header.
+        No session is created.
     </p>
-    <li><span><a href="/basic">/basic</a>: basicauth protected page<br>
-        login with <i>admin:admin</i> or <i>demo:demo</i></span></li>
+    <li><a href="/basic/enforce">/basic/enforce</a> — browser prompts for credentials when not authenticated</li>
+    <li><a href="/basic/silent">/basic/silent</a> — returns 401 silently, no browser prompt</li>
 </ul>
 
-
-<p>Session cookie</p>
+<p>Session Cookie</p>
 <ul>
-
     <p class="info">
-        Same as in basicauth, this demo uses a static user provider.
-        <br>
-        The login page sets an encrypted session cookie on successful login.
-        <br>
-        Notice once logged in other pages will also be able to have access to the cookie, like the content below.
+        Login creates an encrypted session cookie. Protected pages check the cookie.
     </p>
-    {{ if .LoggedIn }}
-    <li><span><a href="/logout">/logout</a>: You are logged in as user: <b>{{ .user }}</b><br>
-        This session will expire in: {{ .expiration }}, or force re-auth in: {{ .forceExpire }} <br>
-        {{ if .sessionRenew}}
-            Access a protected page (invoke the session auth handler) to renew.
-        {{ else }}
-            This session will not bew renewed
-        {{ end }}
-    </span></li>
-    {{ else }}
-    <li><span><a href="/login">/login</a>: You are not logged in <br>
-        login with <i>admin:admin</i> or <i>demo:demo</i>
-    </span></li>
-    {{ end }}
-
-    <p class="info">
-        The protected page then checks the session cookie to grant access.
-    </p>
-    <li><span><a href="/cookie-protected">/cookie-protected</a>: cookie auth protected </span></li>
+    <li><a href="/cookie/login">/cookie/login</a> — login form</li>
+    <li><a href="/cookie/protected">/cookie/protected</a> — cookie-protected page</li>
+    <li><a href="/cookie/logout">/cookie/logout</a> — logout</li>
 </ul>
 
-<p>Http Header</p>
+<p>HTTP Header</p>
 <ul>
-
     <p class="info">
-        This handler delegates authentication to an upstream service;
-        the service should add a header "X-User-Auth" with the value set to the
-        username.
+        Delegates authentication to an upstream service that sets the X-User-Auth header.
     </p>
-
     <p class="info">
-        The easiest way to do this is with a curl
-        <br>
-        curl -H "X-User-Auth: demo" http://localhost:8085/header-protected
+        Test with: <code>curl -H "X-User-Auth: demo" http://localhost:8084/header/protected</code>
     </p>
-    <li><span><a href="/header-protected">/header-protected</a>: HTTP header protected </span></li>
+    <li><a href="/header/protected">/header/protected</a> — header-protected page</li>
 </ul>
 
 </body>

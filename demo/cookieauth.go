@@ -13,10 +13,6 @@ import (
 	"github.com/gorilla/securecookie"
 )
 
-// sessMgr is set by cookieAuthDemo(); demo.go's index handler reads it.
-// TODO(task-4): revert to local var once index handler is cleaned up.
-var sessMgr *cookieauth.Manager
-
 func cookieAuthDemo() http.Handler {
 	r := mux.NewRouter()
 	login := userauth.LoginHandler{UserStore: &demoUsers}
@@ -26,8 +22,7 @@ func cookieAuthDemo() http.Handler {
 		panic(fmt.Errorf("error instantiating cookie store: %v", err))
 	}
 
-	var err2 error
-	sessMgr, err2 = cookieauth.New(cookieauth.Cfg{
+	sessMgr, err := cookieauth.New(cookieauth.Cfg{
 		Store:         sesStore,
 		AllowRenew:    true,
 		SessionDur:    0,
@@ -35,7 +30,7 @@ func cookieAuthDemo() http.Handler {
 		MinWriteSpace: 120 * time.Second,
 		Logger:        logger,
 	})
-	if err2 != nil {
+	if err != nil {
 		panic("error instantiating session manager")
 	}
 
