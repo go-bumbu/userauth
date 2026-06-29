@@ -23,7 +23,7 @@
 
 <p>Two-factor authentication (TOTP)</p>
 {{if .TOTPEnabled}}
-<p class="info">Status: <strong>Enabled</strong>.</p>
+<p class="info">Status: <strong>Enabled</strong>. Recovery codes remaining: {{.RecoveryCount}}.</p>
 <form class="login-form" method="POST" action="/profile/totp/disable">
     <button type="submit">Disable 2FA</button>
 </form>

@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/handlers/auth/cookieauth"
+	"github.com/go-bumbu/userauth/hashutil"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 )
@@ -64,8 +65,27 @@ func profileTOTPConfirmHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not enable TOTP", http.StatusInternalServerError)
 		return
 	}
+	plain, err := hashutil.GenerateRecoveryCodes(6)
+	if err != nil {
+		http.Error(w, "could not generate recovery codes", http.StatusInternalServerError)
+		return
+	}
+	hashed := make([]string, 0, len(plain))
+	for _, c := range plain {
+		h, herr := hashutil.HashRecoveryCode(c)
+		if herr != nil {
+			http.Error(w, "could not hash recovery codes", http.StatusInternalServerError)
+			return
+		}
+		hashed = append(hashed, h)
+	}
+	if err := dbUserMgr.SetRecoveryCodes(ud.UserId, hashed); err != nil {
+		http.Error(w, "could not store recovery codes", http.StatusInternalServerError)
+		return
+	}
 	renderTmpl(w, r, "profile_totp_setup.tmpl.html", map[string]any{
-		"Success": "Two-factor authentication is now enabled.",
+		"Success":       "Two-factor authentication is now enabled.",
+		"RecoveryCodes": plain,
 	})
 }
 
@@ -77,6 +97,10 @@ func profileTOTPDisableHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := dbUserMgr.SetTOTP(ud.UserId, userauth.TOTPData{Enabled: false}); err != nil {
 		http.Error(w, "could not disable TOTP", http.StatusInternalServerError)
+		return
+	}
+	if err := dbUserMgr.SetRecoveryCodes(ud.UserId, nil); err != nil {
+		http.Error(w, "could not clear recovery codes", http.StatusInternalServerError)
 		return
 	}
 	profileViewWithMsg(w, r, "Two-factor authentication disabled.", "")

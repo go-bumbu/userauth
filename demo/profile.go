@@ -88,13 +88,15 @@ func profileViewWithMsg(w http.ResponseWriter, r *http.Request, success, errMsg 
 		return
 	}
 	totpData, _ := dbUserMgr.GetTOTP(user.Id)
+	recoveryCount, _ := dbUserMgr.GetRecoveryCodesCount(user.Id)
 	renderTmpl(w, r, "profile.tmpl.html", map[string]any{
-		"UserID":      user.Id,
-		"Email":       user.PrimaryEmail,
-		"Enabled":     user.Enabled,
-		"Success":     success,
-		"Error":       errMsg,
-		"TOTPEnabled": totpData.Enabled,
+		"UserID":        user.Id,
+		"Email":         user.PrimaryEmail,
+		"Enabled":       user.Enabled,
+		"Success":       success,
+		"Error":         errMsg,
+		"TOTPEnabled":   totpData.Enabled,
+		"RecoveryCount": recoveryCount,
 	})
 }
 

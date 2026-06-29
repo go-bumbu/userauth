@@ -10,6 +10,14 @@
 
 {{if .Success}}
 <p class="info" style="color:#2a7a2a; text-align:center;">{{.Success}}</p>
+{{if .RecoveryCodes}}
+<div class="pseudo-email">
+    <p><strong>Save these recovery codes now</strong> — they are shown only once. Each can be used once if you lose your authenticator.</p>
+    <ul>
+        {{range .RecoveryCodes}}<li><code class="recovery-code">{{.}}</code></li>{{end}}
+    </ul>
+</div>
+{{end}}
 <p><a href="/profile/">← Back to profile</a></p>
 {{else}}
 
