@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"net/http"
 	"strings"
 
@@ -18,9 +19,14 @@ func init() {
 	if err != nil {
 		panic("failed to open in-memory sqlite: " + err.Error())
 	}
+	totpKey := make([]byte, 32)
+	if _, err := rand.Read(totpKey); err != nil {
+		panic("failed to generate TOTP encryption key: " + err.Error())
+	}
 	mgr, err := dbusers.NewDbManager(db, dbusers.ManagerOpts{
-		BcryptDifficulty: 4,
-		DefaultEnabled:   true,
+		BcryptDifficulty:  4,
+		DefaultEnabled:    true,
+		TOTPEncryptionKey: totpKey,
 	})
 	if err != nil {
 		panic("failed to create db manager: " + err.Error())

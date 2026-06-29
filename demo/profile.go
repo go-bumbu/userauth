@@ -19,8 +19,6 @@ var profileSessMgr *cookieauth.Manager
 func profileDemo() http.Handler {
 	r := mux.NewRouter()
 
-	login := userauth.LoginHandler{UserStore: dbUserMgr}
-
 	sesStore, err := cookieauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
 	if err != nil {
 		panic(fmt.Errorf("profile: error instantiating cookie store: %v", err))
@@ -39,11 +37,18 @@ func profileDemo() http.Handler {
 		panic("profile: error instantiating session manager")
 	}
 
+	profileLogin = userauth.LoginHandler{
+		UserStore:     dbUserMgr,
+		SecondFactors: dbUserMgr,
+		TOTP:          dbUserMgr,
+		RecoveryCode:  dbUserMgr,
+	}
+
 	r.Path("/login").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		renderTmpl(w, r, "profile_login.tmpl.html", nil)
 	})
-	r.Path("/login").Methods(http.MethodPost).Handler(
-		logincookie.FormAuthHandler(profileSessMgr, &login, "/profile/"))
+	r.Path("/login").Methods(http.MethodPost).HandlerFunc(profileLoginHandler)
+	r.Path("/login/2fa").Methods(http.MethodPost).HandlerFunc(profile2FAHandler)
 	r.Path("/logout").Handler(
 		logincookie.LogoutHandler(profileSessMgr, "/"))
 
