@@ -30,6 +30,8 @@ func init() {
 	for _, seed := range []struct{ id, pw string }{
 		{"admin", "admin"},
 		{"demo", "demo"},
+		{"admin@example.com", "admin"},
+		{"demo@example.com", "demo"},
 	} {
 		if err := dbUserMgr.Create(seed.id, seed.pw); err != nil {
 			panic("failed to seed user " + seed.id + ": " + err.Error())
