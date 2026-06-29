@@ -55,6 +55,9 @@ func profileDemo() http.Handler {
 	r.Path("/").Methods(http.MethodGet).Handler(requireProfileAuth(http.HandlerFunc(profileViewHandler)))
 	r.Path("/change-password").Methods(http.MethodPost).Handler(requireProfileAuth(http.HandlerFunc(profileChangePasswordHandler)))
 	r.Path("/change-email").Methods(http.MethodPost).Handler(requireProfileAuth(http.HandlerFunc(profileChangeEmailHandler)))
+	r.Path("/totp/setup").Methods(http.MethodPost).Handler(requireProfileAuth(http.HandlerFunc(profileTOTPSetupHandler)))
+	r.Path("/totp/confirm").Methods(http.MethodPost).Handler(requireProfileAuth(http.HandlerFunc(profileTOTPConfirmHandler)))
+	r.Path("/totp/disable").Methods(http.MethodPost).Handler(requireProfileAuth(http.HandlerFunc(profileTOTPDisableHandler)))
 
 	return r
 }
@@ -84,12 +87,14 @@ func profileViewWithMsg(w http.ResponseWriter, r *http.Request, success, errMsg 
 		http.Error(w, "user not found", http.StatusInternalServerError)
 		return
 	}
+	totpData, _ := dbUserMgr.GetTOTP(user.Id)
 	renderTmpl(w, r, "profile.tmpl.html", map[string]any{
-		"UserID":  user.Id,
-		"Email":   user.PrimaryEmail,
-		"Enabled": user.Enabled,
-		"Success": success,
-		"Error":   errMsg,
+		"UserID":      user.Id,
+		"Email":       user.PrimaryEmail,
+		"Enabled":     user.Enabled,
+		"Success":     success,
+		"Error":       errMsg,
+		"TOTPEnabled": totpData.Enabled,
 	})
 }
 

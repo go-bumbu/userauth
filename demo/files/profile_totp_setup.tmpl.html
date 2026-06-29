@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Set up authenticator</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3>Set up your authenticator</h3>
+
+{{if .Success}}
+<p class="info" style="color:#2a7a2a; text-align:center;">{{.Success}}</p>
+<p><a href="/profile/">← Back to profile</a></p>
+{{else}}
+
+<p class="info" style="text-align:center;">
+    Scan the QR code with your authenticator app (or enter the secret manually),
+    then enter the 6-digit code it shows to confirm.
+</p>
+
+{{if .QRDataURI}}
+<p style="text-align:center;"><img src="{{.QRDataURI}}" alt="TOTP QR code" width="220" height="220"></p>
+{{end}}
+
+<p class="info" style="text-align:center;">Secret: <code class="totp-secret">{{.Secret}}</code></p>
+
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+
+<form class="login-form" method="POST" action="/profile/totp/confirm">
+    <label for="code">Authenticator code</label>
+    <input type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code"
+           placeholder="123456" required autofocus>
+    <button type="submit">Confirm and enable</button>
+</form>
+
+<p><a href="/profile/">← Cancel</a></p>
+{{end}}
+</body>
+</html>

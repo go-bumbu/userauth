@@ -21,6 +21,19 @@
     <li><strong>Status:</strong> {{if .Enabled}}Enabled{{else}}Disabled{{end}}</li>
 </ul>
 
+<p>Two-factor authentication (TOTP)</p>
+{{if .TOTPEnabled}}
+<p class="info">Status: <strong>Enabled</strong>.</p>
+<form class="login-form" method="POST" action="/profile/totp/disable">
+    <button type="submit">Disable 2FA</button>
+</form>
+{{else}}
+<p class="info">Status: not enabled.</p>
+<form class="login-form" method="POST" action="/profile/totp/setup">
+    <button type="submit">Set up authenticator</button>
+</form>
+{{end}}
+
 <p>Change Password</p>
 <form class="login-form" method="POST" action="/profile/change-password">
     <label for="current_password">Current password</label>
