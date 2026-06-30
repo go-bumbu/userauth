@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/demo/examples"
 	"github.com/go-bumbu/userauth/demo/store"
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/dbusers"
@@ -38,19 +39,19 @@ func demoHandler() http.Handler {
 	r := mux.NewRouter()
 
 	// ===============================================
-	// Basicauth — see basicauth.go
+	// Basicauth — see examples/basicauth.go
 	// ===============================================
-	r.PathPrefix("/basic/").Handler(http.StripPrefix("/basic", basicAuthDemo()))
+	r.PathPrefix("/basic/").Handler(http.StripPrefix("/basic", examples.BasicAuth(logger, &demoUsers, rnd)))
 
 	// ===============================================
-	// Password form login (cookie session) — see passwordlogin.go
+	// Password form login (cookie session) — see examples/passwordlogin.go
 	// ===============================================
-	r.PathPrefix("/cookie/").Handler(http.StripPrefix("/cookie", cookieAuthDemo()))
+	r.PathPrefix("/cookie/").Handler(http.StripPrefix("/cookie", examples.PasswordLogin(logger, &demoUsers, rnd)))
 
 	// ===============================================
-	// Header auth — see headerauth.go
+	// Header auth — see examples/headerauth.go
 	// ===============================================
-	r.PathPrefix("/header/").Handler(http.StripPrefix("/header", headerAuthDemo()))
+	r.PathPrefix("/header/").Handler(http.StripPrefix("/header", examples.HeaderAuth(logger, rnd)))
 
 	// ===============================================
 	// Passwordless email-code login — see emaillogin.go

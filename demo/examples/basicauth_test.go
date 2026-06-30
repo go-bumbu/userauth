@@ -1,19 +1,13 @@
-package main
+package examples
 
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 )
 
-func TestMain(m *testing.M) {
-	initLogger()
-	os.Exit(m.Run())
-}
-
 func TestBasicAuthEnforce(t *testing.T) {
-	handler := basicAuthDemo()
+	handler := BasicAuth(testLogger(), staticDemoUsers(), testWeb())
 
 	t.Run("no credentials returns 401 with WWW-Authenticate", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/enforce", nil)
@@ -49,7 +43,7 @@ func TestBasicAuthEnforce(t *testing.T) {
 }
 
 func TestBasicAuthSilent(t *testing.T) {
-	handler := basicAuthDemo()
+	handler := BasicAuth(testLogger(), staticDemoUsers(), testWeb())
 
 	t.Run("no credentials returns 401 without WWW-Authenticate", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/silent", nil)
