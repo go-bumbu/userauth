@@ -1,11 +1,11 @@
 package examples
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
-	"log/slog"
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/store"
