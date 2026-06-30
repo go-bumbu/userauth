@@ -84,6 +84,19 @@ func (s Store) CreateUserWithHashedPassword(usr User) error {
 	return s.db.Create(&usrModel).Error
 }
 
+// toUser maps the stored row to the public userauth.User.
+func (m userModel) toUser() userauth.User {
+	return userauth.User{
+		Id:                   m.LoginID,
+		HashPw:               m.Pw,
+		Enabled:              m.Enabled,
+		PrimaryEmail:         m.PrimaryEmail,
+		PrimaryEmailVerified: m.PrimaryEmailVerified,
+		BackupEmail:          m.BackupEmail,
+		BackupEmailVerified:  m.BackupEmailVerified,
+	}
+}
+
 // GetUser implements userauth.UserGetter. Looks up user by login ID.
 func (s Store) GetUser(id string) (userauth.User, error) {
 	var m userModel
@@ -94,15 +107,56 @@ func (s Store) GetUser(id string) (userauth.User, error) {
 		}
 		return userauth.User{}, err
 	}
-	return userauth.User{
-		Id:                   m.LoginID,
-		HashPw:               m.Pw,
-		Enabled:              m.Enabled,
-		PrimaryEmail:         m.PrimaryEmail,
-		PrimaryEmailVerified: m.PrimaryEmailVerified,
-		BackupEmail:          m.BackupEmail,
-		BackupEmailVerified:  m.BackupEmailVerified,
-	}, nil
+	return m.toUser(), nil
+}
+
+const (
+	defaultListLimit = 50
+	maxListLimit     = 200
+)
+
+// ListOpts controls pagination for List.
+type ListOpts struct {
+	Limit  int // max rows to return; <=0 uses defaultListLimit, capped at maxListLimit
+	Offset int // rows to skip; <0 is treated as 0
+}
+
+// ListResult is a page of users plus the total count.
+type ListResult struct {
+	Users []userauth.User // page of users, ordered by login_id ASC
+	Total int             // total number of users, ignoring Limit/Offset
+}
+
+// List returns a page of users ordered by login ID, plus the total user count
+// so callers can render "page X of Y".
+func (s Store) List(opts ListOpts) (ListResult, error) {
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = defaultListLimit
+	}
+	if limit > maxListLimit {
+		limit = maxListLimit
+	}
+	offset := opts.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	var total int64
+	if err := s.db.Model(&userModel{}).Count(&total).Error; err != nil {
+		return ListResult{}, err
+	}
+
+	var rows []userModel
+	if err := s.db.Order("login_id ASC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
+		return ListResult{}, err
+	}
+
+	users := make([]userauth.User, 0, len(rows))
+	for _, m := range rows {
+		users = append(users, m.toUser())
+	}
+	return ListResult{Users: users, Total: int(total)}, nil
 }
 
 // SetPrimaryEmail updates the primary email for a user. Resets PrimaryEmailVerified to false.

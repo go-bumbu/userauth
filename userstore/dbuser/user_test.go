@@ -142,3 +142,74 @@ func TestSetPasswordHash(t *testing.T) {
 		t.Errorf("old password should not verify after hash update")
 	}
 }
+
+func TestList(t *testing.T) {
+	mng := setup(t)
+	defer clean()
+
+	// empty store
+	res, err := mng.List(ListOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Total != 0 {
+		t.Errorf("empty: want total 0, got %d", res.Total)
+	}
+	if len(res.Users) != 0 {
+		t.Errorf("empty: want 0 users, got %d", len(res.Users))
+	}
+
+	ids := []string{"u1", "u2", "u3", "u4", "u5"}
+	for _, id := range ids {
+		if err := mng.Create(id, "pw"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// default limit returns all five, ordered by login_id, total = 5
+	res, err = mng.List(ListOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Total != 5 {
+		t.Errorf("default: want total 5, got %d", res.Total)
+	}
+	if len(res.Users) != 5 {
+		t.Fatalf("default: want 5 users, got %d", len(res.Users))
+	}
+	for i, want := range ids {
+		if res.Users[i].Id != want {
+			t.Errorf("default order: index %d want %q, got %q", i, want, res.Users[i].Id)
+		}
+	}
+
+	// page 1 of size 2
+	res, _ = mng.List(ListOpts{Limit: 2, Offset: 0})
+	if res.Total != 5 {
+		t.Errorf("page1: want total 5, got %d", res.Total)
+	}
+	if len(res.Users) != 2 || res.Users[0].Id != "u1" || res.Users[1].Id != "u2" {
+		t.Errorf("page1: want [u1 u2], got %+v", res.Users)
+	}
+
+	// page 2 of size 2
+	res, _ = mng.List(ListOpts{Limit: 2, Offset: 2})
+	if len(res.Users) != 2 || res.Users[0].Id != "u3" || res.Users[1].Id != "u4" {
+		t.Errorf("page2: want [u3 u4], got %+v", res.Users)
+	}
+
+	// offset past the end → empty (non-nil), total still 5
+	res, _ = mng.List(ListOpts{Limit: 2, Offset: 10})
+	if res.Total != 5 {
+		t.Errorf("overflow: want total 5, got %d", res.Total)
+	}
+	if res.Users == nil || len(res.Users) != 0 {
+		t.Errorf("overflow: want empty non-nil slice, got %+v", res.Users)
+	}
+
+	// negative offset behaves like 0
+	res, _ = mng.List(ListOpts{Limit: 1, Offset: -3})
+	if len(res.Users) != 1 || res.Users[0].Id != "u1" {
+		t.Errorf("negative offset: want [u1], got %+v", res.Users)
+	}
+}
