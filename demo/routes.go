@@ -33,7 +33,7 @@ func demoHandler() http.Handler {
 	r.PathPrefix("/basic/").Handler(http.StripPrefix("/basic", basicAuthDemo()))
 
 	// ===============================================
-	// Cookie session — see cookieauth.go
+	// Password form login (cookie session) — see passwordlogin.go
 	// ===============================================
 	r.PathPrefix("/cookie/").Handler(http.StripPrefix("/cookie", cookieAuthDemo()))
 
@@ -43,17 +43,17 @@ func demoHandler() http.Handler {
 	r.PathPrefix("/header/").Handler(http.StripPrefix("/header", headerAuthDemo()))
 
 	// ===============================================
-	// Passwordless email-code login — see emailcode.go
+	// Passwordless email-code login — see emaillogin.go
 	// ===============================================
 	r.PathPrefix("/emailcode/").Handler(http.StripPrefix("/emailcode", emailCodeDemo()))
 
 	// ===============================================
-	// User management — see usermgmt.go
+	// User management — see users_admin.go
 	// ===============================================
 	r.PathPrefix("/users/").Handler(http.StripPrefix("/users", userMgmtDemo()))
 
 	// ===============================================
-	// User registration — see register.go, register_email.go
+	// User registration — see register_password.go, register_email.go
 	// ===============================================
 	r.Path("/register").Methods(http.MethodGet, http.MethodPost).HandlerFunc(registerHandler)
 	r.Path("/register/email").Methods(http.MethodGet, http.MethodPost).HandlerFunc(registerEmailHandler)

@@ -11,7 +11,7 @@ import (
 	pendingmemory "github.com/go-bumbu/userauth/pendinglogin/memory"
 )
 
-// profileLogin is built in profileDemo() (after dbUserMgr is initialised in usermgmt.go init()).
+// profileLogin is built in profileDemo() (after dbUserMgr is initialised in users_admin.go init()).
 var profileLogin userauth.LoginHandler
 
 // profilePendingLogins holds the pending second-factor state between the password step

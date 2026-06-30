@@ -16,7 +16,7 @@ func headerAuthDemo() http.Handler {
 		hauth.Middleware(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			data := hauth.GetData(req)
 			renderTmpl(w, req, "protected.tmpl.html", map[string]any{
-				"text": fmt.Sprintf("content protected by header X-User-Auth — authenticated as: %s", data.UserName),
+				"text": fmt.Sprintf("content protected by header X-User-Auth - authenticated as: %s", data.UserName),
 			})
 		})),
 	)

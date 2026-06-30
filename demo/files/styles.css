@@ -2,8 +2,9 @@
 body {
     font-family: Arial, sans-serif;
     line-height: 1.6;
-    margin: 0;
-    padding: 0;
+    margin: 0 auto;
+    padding: 0 20px;
+    max-width: 960px;
     background-color: #f9f9f9;
     color: #333;
 }
@@ -37,7 +38,7 @@ ul {
     list-style: none;
     padding: 0;
     margin: 20px auto;
-    max-width: 600px;
+    max-width: 900px;
     background: #fff;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -85,7 +86,7 @@ ul ul li {
 
 /* Login Form Styles */
 .login-form {
-    max-width: 400px;
+    max-width: 500px;
     margin: 20px auto;
     padding: 20px;
     background: #fff;
@@ -135,7 +136,7 @@ ul ul li {
 
 /* User Management Table */
 .user-table {
-    max-width: 600px;
+    max-width: 900px;
     margin: 20px auto;
     width: 100%;
     border-collapse: collapse;
@@ -171,8 +172,79 @@ ul ul li {
     background-color: #003d80;
 }
 
+/* Pseudo-email code display */
+.pseudo-email {
+    max-width: 500px;
+    margin: 16px auto;
+    padding: 14px 20px;
+    background: #fffbe6;
+    border: 1px solid #f0c040;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.pseudo-email p {
+    margin: 4px 0;
+    font-size: 0.95em;
+    color: #555;
+}
+
+.email-code {
+    display: inline-block;
+    font-size: 2em;
+    font-weight: bold;
+    letter-spacing: 0.2em;
+    color: #0056b3;
+    margin-top: 6px;
+}
+
 p.error {
     color: #c00;
     font-weight: bold;
     text-align: center;
+}
+
+/* Tabs */
+.tabs input[type="radio"] {
+    display: none;
+}
+
+.tab-labels {
+    display: flex;
+    max-width: 900px;
+    margin: 20px auto 0;
+    border-bottom: 2px solid #0056b3;
+}
+
+.tab-labels label {
+    padding: 10px 24px;
+    cursor: pointer;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-bottom: none;
+    margin-right: 4px;
+    border-radius: 4px 4px 0 0;
+    color: #555;
+    font-weight: bold;
+}
+
+.tab-labels label:hover {
+    background: #e0e8f5;
+    color: #0056b3;
+}
+
+#tab-auth:checked ~ .tab-labels label[for="tab-auth"],
+#tab-users:checked ~ .tab-labels label[for="tab-users"] {
+    background: #0056b3;
+    color: white;
+    border-color: #0056b3;
+}
+
+.tab-content {
+    display: none;
+}
+
+#tab-auth:checked ~ .auth-content,
+#tab-users:checked ~ .users-content {
+    display: block;
 }

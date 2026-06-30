@@ -1,52 +1,130 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>User authentication demo</title>
     <link rel="stylesheet" type="text/css" href="/styles.css">
 </head>
 <body>
 <h3>Authenticator demo</h3>
-<p>Static users (no database): <i>admin:admin</i> or <i>demo:demo</i></p>
 
-<p>Basic Auth</p>
-<ul>
-    <p class="info">
-        Verifies credentials on every request via the Authorization header.
-        No session is created.
-    </p>
-    <li><a href="/basic/enforce">/basic/enforce</a> - browser prompts for credentials when not authenticated</li>
-    <li><a href="/basic/silent">/basic/silent</a> - returns 401 silently, no browser prompt, if no credentials are provided</li>
-</ul>
+<div class="tabs">
+    <input type="radio" name="tab" id="tab-auth" checked>
+    <input type="radio" name="tab" id="tab-users">
 
-<p>Session Cookie</p>
-<ul>
-    <p class="info">
-        Login creates an encrypted session cookie. Protected pages check the cookie.
-    </p>
-    <li><a href="/cookie/login">/cookie/login</a> - login form (JSON endpoint is also supported)</li>
-    <li><a href="/cookie/protected">/cookie/protected</a> - cookie-protected page</li>
-    <li><a href="/cookie/logout">/cookie/logout</a> - logout (invalidate the cookie)</li>
-</ul>
+    <div class="tab-labels">
+        <label for="tab-auth">Authentication</label>
+        <label for="tab-users">User Management</label>
+    </div>
 
-<p>HTTP Header</p>
-<ul>
-    <p class="info">
-        Delegates authentication to an upstream service that sets the X-User-Auth header.
-    </p>
-    <p class="info">
-        Test with: <code>curl -H "X-User-Auth: demo" http://localhost:8084/header/protected</code>
-    </p>
-    <li><a href="/header/protected">/header/protected</a> - header-protected page</li>
-</ul>
+    <div class="tab-content auth-content">
+        <p>Static users (no database): <i>admin:admin</i> or <i>demo:demo</i></p>
+        <p>Basic Auth</p>
+        <ul>
+            <p class="info">
+                Verifies credentials on every request via the Authorization header.
+                No session is created.
+            </p>
+            <li><a href="/basic/enforce">/basic/enforce</a> - browser prompts for credentials when not authenticated</li>
+            <li><a href="/basic/silent">/basic/silent</a> - returns 401 silently, no browser prompt, if no credentials are provided</li>
+        </ul>
 
-<p>User Management</p>
-<ul>
-    <p class="info">
-        Create users and toggle their enabled state.
-        Backed by a DbManager with an in-memory SQLite database — data resets on every server restart.
-    </p>
-    <li><a href="/users/">/users/</a> - list, create, enable/disable users</li>
-</ul>
+        <p>Password</p>
+        <ul>
+            <p class="info">
+                Log in with a username and password. On success it creates an encrypted
+                cookie to store the auth session; protected pages check that cookie.
+            </p>
+            <li><a href="/cookie/login">/cookie/login</a> - login form (JSON endpoint is also supported)</li>
+            <li><a href="/cookie/protected">/cookie/protected</a> - cookie-protected page</li>
+            <li><a href="/cookie/logout">/cookie/logout</a> - logout (invalidate the cookie)</li>
+        </ul>
 
+        <p>Passwordless (email code)</p>
+        <ul>
+            <p class="info">
+                Log in with just an email — a 6-digit code is shown on the next page
+                (simulating email delivery). No password. Demo accounts:
+                <code>admin@example.com</code>, <code>demo@example.com</code>.
+            </p>
+            <li><a href="/emailcode/login">/emailcode/login</a> - request a login code</li>
+            <li><a href="/emailcode/protected">/emailcode/protected</a> - cookie-protected page</li>
+            <li><a href="/emailcode/logout">/emailcode/logout</a> - logout</li>
+        </ul>
+
+        <p>HTTP Header</p>
+        <ul>
+            <p class="info">
+                Delegates authentication to an upstream service that sets the X-User-Auth header.
+            </p>
+            <p class="info">
+                Test with: <code>curl -H "X-User-Auth: demo" http://localhost:8084/header/protected</code>
+            </p>
+            <li><a href="/header/protected">/header/protected</a> - header-protected page</li>
+        </ul>
+    </div>
+
+    <div class="tab-content users-content">
+        <p class="info">
+            All sections below share a DbManager backed by an in-memory SQLite database — data resets on every server restart.
+        </p>
+        <p>Registration</p>
+        <ul>
+            <p class="info">
+                Username-based: supply a login name and password, account is created immediately.
+            </p>
+            <li><a href="/register">/register</a> - username registration</li>
+            <p class="info">
+                Email-based: supply an email and password, then verify a 6-digit code shown on
+                the next page (simulating email delivery).
+            </p>
+            <li><a href="/register/email">/register/email</a> - email registration with verification code</li>
+        </ul>
+
+        <p>Admin</p>
+        <ul>
+            <p class="info">
+                Create users and toggle their enabled state.
+            </p>
+            <li><a href="/users/">/users/</a> - list, create, enable/disable users</li>
+        </ul>
+
+        <p>My Profile</p>
+        <ul>
+            <p class="info">
+                Logged-in users can view their account details, change their password, and update their email.
+                Uses the database user store. Pre-populated accounts:
+                <code>admin@example.com</code> / <code>admin</code> and
+                <code>demo@example.com</code> / <code>demo</code> — or register your own.
+                Accounts can also enable a TOTP authenticator as a second factor (with one-time recovery codes).
+            </p>
+            <li><a href="/profile/">/profile/</a> - view and edit your profile (redirects to login if not authenticated)</li>
+            <li><a href="/profile/login">/profile/login</a> - login with a database account</li>
+            <li><a href="/profile/logout">/profile/logout</a> - logout</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    (function() {
+        // Restore tab from URL on load
+        var params = new URLSearchParams(location.search);
+        var tab = params.get('tab');
+        if (tab) {
+            var el = document.getElementById('tab-' + tab);
+            if (el) el.checked = true;
+        }
+
+        // Update URL when a tab is selected
+        document.querySelectorAll('.tabs input[type="radio"]').forEach(function(radio) {
+            radio.addEventListener('change', function() {
+                var name = this.id.replace('tab-', '');
+                var url = new URL(location.href);
+                url.searchParams.set('tab', name);
+                history.replaceState(null, '', url);
+            });
+        });
+    })();
+</script>
 </body>
 </html>

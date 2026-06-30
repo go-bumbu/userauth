@@ -52,7 +52,7 @@ cover-report: ## generate a coverage report
 
 .PHONY: demo
 run-demo: ## run the demo
-	go run demo/*.go
+	go run ./demo/
 
 #==========================================================================================
 ##@ Release
