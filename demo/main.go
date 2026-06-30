@@ -7,63 +7,59 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/demo/router"
+	"github.com/go-bumbu/userauth/demo/store"
+	"github.com/go-bumbu/userauth/demo/web"
+	"github.com/go-bumbu/userauth/userstore/staticusers"
 )
 
 func main() {
-	initLogger()
-	srv := NewServer()
-	go srv.Start()
+	logger := newLogger()
+
+	users, registry, err := store.New()
+	if err != nil {
+		panic(fmt.Errorf("init store: %w", err))
+	}
+
+	staticUsers := &staticusers.Users{Users: []staticusers.User{
+		{Id: "admin", HashPw: userauth.MustHashPw("admin"), Enabled: true},
+		{Id: "demo", HashPw: userauth.MustHashPw("demo"), Enabled: true},
+	}}
+
+	handler := router.New(router.Cfg{
+		Logger:      logger,
+		Users:       users,
+		Registry:    registry,
+		StaticUsers: staticUsers,
+		Web:         web.New(),
+	})
+
+	srv := &http.Server{Addr: ":8084", Handler: handler} // #nosec G112 -- demo server
+	go func() {
+		logger.Info("Server is running on port http://localhost:8084")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			panic(err)
+		}
+	}()
+
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 	<-signalChan
 	logger.Info("Signal received, shutting down...")
-	srv.Stop()
+	_ = srv.Close()
 }
 
-type Server struct {
-	server *http.Server
-	router http.Handler
-}
-
-func NewServer() *Server {
-	handler := demoHandler()
-	s := &Server{
-		router: handler,
-	}
-	return s
-}
-
-func (s *Server) Start() {
-	logger.Info("Server is running on port http://localhost:8084")
-	err := http.ListenAndServe(":8084", s.router) //nolint: gosec //test server
-	if err != nil {
-		panic(err)
-	}
-}
-
-func (s *Server) Stop() {
-	if s.server != nil {
-		fmt.Println("Stopping server")
-		_ = s.server.Close()
-	}
-}
-
-var logger *slog.Logger
-
-func initLogger() {
-	// TODO add a nice human logger
-
+func newLogger() *slog.Logger {
 	opts := &slog.HandlerOptions{
-		Level: slog.LevelDebug, // show all messages including debug
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Format time nicely
+		Level: slog.LevelDebug,
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {
 				a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02 15:04:05"))
 			}
 			return a
 		},
 	}
-
-	handler := slog.NewTextHandler(os.Stdout, opts)
-	logger = slog.New(handler)
+	return slog.New(slog.NewTextHandler(os.Stdout, opts))
 }
