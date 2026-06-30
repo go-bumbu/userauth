@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-bumbu/userauth/demo/store"
 	"github.com/go-bumbu/userauth/userstore/dbuser"
 	"github.com/pquerna/otp/totp"
 )
@@ -47,7 +46,7 @@ func enrollTOTP(t *testing.T, handler http.Handler, users *dbuser.Store, uid str
 }
 
 func TestProfileTOTPEnroll(t *testing.T) {
-	users, _, err := store.New()
+	users, err := SeededStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +64,7 @@ func TestProfileTOTPEnroll(t *testing.T) {
 }
 
 func TestProfileTOTPDisable(t *testing.T) {
-	users, _, err := store.New()
+	users, err := SeededStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +88,7 @@ func TestProfileTOTPDisable(t *testing.T) {
 var recoveryCodeRe = regexp.MustCompile(`recovery-code">([^<]+)<`)
 
 func TestProfileTOTPRecoveryCodesShown(t *testing.T) {
-	users, _, err := store.New()
+	users, err := SeededStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +118,7 @@ func TestProfileTOTPRecoveryCodesShown(t *testing.T) {
 }
 
 func TestProfileRecoveryCodeLogin(t *testing.T) {
-	users, _, err := store.New()
+	users, err := SeededStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +159,7 @@ func TestProfileRecoveryCodeLogin(t *testing.T) {
 }
 
 func TestProfileTOTPDisableClearsRecoveryCodes(t *testing.T) {
-	users, _, err := store.New()
+	users, err := SeededStore()
 	if err != nil {
 		t.Fatal(err)
 	}

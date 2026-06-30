@@ -9,8 +9,8 @@ import (
 	"syscall"
 
 	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/demo/examples"
 	"github.com/go-bumbu/userauth/demo/router"
-	"github.com/go-bumbu/userauth/demo/store"
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 )
@@ -18,7 +18,7 @@ import (
 func main() {
 	logger := newLogger()
 
-	users, registry, err := store.New()
+	users, err := examples.SeededStore()
 	if err != nil {
 		panic(fmt.Errorf("init store: %w", err))
 	}
@@ -31,7 +31,6 @@ func main() {
 	handler := router.New(router.Cfg{
 		Logger:      logger,
 		Users:       users,
-		Registry:    registry,
 		StaticUsers: staticUsers,
 		Web:         web.New(),
 	})

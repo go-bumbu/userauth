@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/demo/store"
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/dbuser"
 	vcmemory "github.com/go-bumbu/userauth/verificationcode/memory"
@@ -18,7 +17,6 @@ import (
 type Register struct {
 	log     *slog.Logger
 	users   *dbuser.Store
-	reg     *store.Registry
 	rnd     *web.Renderer
 	store   *vcmemory.Store
 	codeSvc *userauth.VerificationCodeService
@@ -35,8 +33,8 @@ type pendingEmailReg struct {
 }
 
 // NewRegister creates a Register and initialises its verification-code store.
-func NewRegister(log *slog.Logger, users *dbuser.Store, reg *store.Registry, rnd *web.Renderer) *Register {
-	a := &Register{log: log, users: users, reg: reg, rnd: rnd, store: vcmemory.New()}
+func NewRegister(log *slog.Logger, users *dbuser.Store, rnd *web.Renderer) *Register {
+	a := &Register{log: log, users: users, rnd: rnd, store: vcmemory.New()}
 	a.codeSvc = &userauth.VerificationCodeService{Store: a.store.Store, CodeLength: 6, Expiry: 10 * time.Minute}
 	a.pending.items = make(map[string]pendingEmailReg)
 	return a
@@ -77,7 +75,6 @@ func (a *Register) Password(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.reg.Add(login)
 	a.rnd.Render(w, r, "register.tmpl.html", map[string]any{
 		"Success": "User \"" + login + "\" registered successfully.",
 	})
@@ -179,7 +176,6 @@ func (a *Register) EmailVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.reg.Add(email)
 	a.rnd.Render(w, r, "register_email_verify.tmpl.html", map[string]any{
 		"Email":   email,
 		"Success": "Account created. You can now log in at /profile/login.",

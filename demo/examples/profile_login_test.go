@@ -8,12 +8,11 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/demo/store"
 	"github.com/pquerna/otp/totp"
 )
 
 func TestProfileLoginOneStepNoTOTP(t *testing.T) {
-	users, _, err := store.New()
+	users, err := SeededStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +34,7 @@ func TestProfileLoginOneStepNoTOTP(t *testing.T) {
 }
 
 func TestProfileLoginTwoStepTOTP(t *testing.T) {
-	users, _, err := store.New()
+	users, err := SeededStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +76,7 @@ func TestProfileLoginTwoStepTOTP(t *testing.T) {
 }
 
 func TestProfileLoginTwoStepWrongCode(t *testing.T) {
-	users, _, err := store.New()
+	users, err := SeededStore()
 	if err != nil {
 		t.Fatal(err)
 	}

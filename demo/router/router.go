@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/examples"
-	"github.com/go-bumbu/userauth/demo/store"
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/dbuser"
 	"github.com/gorilla/mux"
@@ -16,7 +15,6 @@ import (
 type Cfg struct {
 	Logger      *slog.Logger
 	Users       *dbuser.Store       // DB-backed store: profile, register, usersadmin
-	Registry    *store.Registry     // shared user-id list for register + usersadmin
 	StaticUsers userauth.UserGetter // static credentials: basicauth + passwordlogin
 	Web         *web.Renderer
 }
@@ -29,9 +27,9 @@ func New(cfg Cfg) http.Handler {
 	r.PathPrefix("/cookie/").Handler(http.StripPrefix("/cookie", examples.PasswordLogin(cfg.Logger, cfg.StaticUsers, cfg.Web)))
 	r.PathPrefix("/header/").Handler(http.StripPrefix("/header", examples.HeaderAuth(cfg.Logger, cfg.Web)))
 	r.PathPrefix("/emailcode/").Handler(http.StripPrefix("/emailcode", examples.EmailLogin(cfg.Logger, cfg.Web)))
-	r.PathPrefix("/users/").Handler(http.StripPrefix("/users", examples.UsersAdmin(cfg.Logger, cfg.Users, cfg.Registry, cfg.Web)))
+	r.PathPrefix("/users/").Handler(http.StripPrefix("/users", examples.UsersAdmin(cfg.Logger, cfg.Users, cfg.Web)))
 
-	reg := examples.NewRegister(cfg.Logger, cfg.Users, cfg.Registry, cfg.Web)
+	reg := examples.NewRegister(cfg.Logger, cfg.Users, cfg.Web)
 	r.Path("/register").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.Password)
 	r.Path("/register/email").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.Email)
 	r.Path("/register/email/verify").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.EmailVerify)

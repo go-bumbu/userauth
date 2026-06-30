@@ -37,6 +37,12 @@
     </tbody>
 </table>
 
+<div class="pagination">
+    {{if .HasPrev}}<a href="/users/?page={{.PrevPage}}">← Prev</a>{{end}}
+    <span>Page {{.Page}} of {{.TotalPages}}</span>
+    {{if .HasNext}}<a href="/users/?page={{.NextPage}}">Next →</a>{{end}}
+</div>
+
 <h4>Create User</h4>
 <form method="POST" action="/users/" class="login-form">
     <label for="login">Login ID</label>
