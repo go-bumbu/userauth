@@ -54,9 +54,9 @@ func demoHandler() http.Handler {
 	r.PathPrefix("/header/").Handler(http.StripPrefix("/header", examples.HeaderAuth(logger, rnd)))
 
 	// ===============================================
-	// Passwordless email-code login — see emaillogin.go
+	// Passwordless email-code login — see examples/emaillogin.go
 	// ===============================================
-	r.PathPrefix("/emailcode/").Handler(http.StripPrefix("/emailcode", emailCodeDemo()))
+	r.PathPrefix("/emailcode/").Handler(http.StripPrefix("/emailcode", examples.EmailLogin(logger, rnd)))
 
 	// ===============================================
 	// User management — see users_admin.go

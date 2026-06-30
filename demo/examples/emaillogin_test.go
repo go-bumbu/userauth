@@ -1,4 +1,4 @@
-package main
+package examples
 
 import (
 	"net/http"
@@ -12,7 +12,7 @@ import (
 var emailCodeRe = regexp.MustCompile(`email-code">(\d{6})<`)
 
 func TestEmailCodeRequestUnknownEmail(t *testing.T) {
-	handler := emailCodeDemo()
+	handler := EmailLogin(testLogger(), testWeb())
 	form := url.Values{"email": {"nobody@example.com"}}
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -27,7 +27,7 @@ func TestEmailCodeRequestUnknownEmail(t *testing.T) {
 }
 
 func TestEmailCodeRequestValidEmail(t *testing.T) {
-	handler := emailCodeDemo()
+	handler := EmailLogin(testLogger(), testWeb())
 	form := url.Values{"email": {"demo@example.com"}}
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -43,7 +43,7 @@ func TestEmailCodeRequestValidEmail(t *testing.T) {
 }
 
 func TestEmailCodeLoginHappyPath(t *testing.T) {
-	handler := emailCodeDemo()
+	handler := EmailLogin(testLogger(), testWeb())
 
 	// Step 1: request a code.
 	form := url.Values{"email": {"demo@example.com"}}
@@ -98,7 +98,7 @@ func TestEmailCodeLoginHappyPath(t *testing.T) {
 }
 
 func TestEmailCodeLoginWrongCode(t *testing.T) {
-	handler := emailCodeDemo()
+	handler := EmailLogin(testLogger(), testWeb())
 
 	// Request a code so a pending entry exists.
 	form := url.Values{"email": {"admin@example.com"}}
