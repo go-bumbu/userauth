@@ -74,7 +74,7 @@ func usersListWithMsg(w http.ResponseWriter, r *http.Request, msg string) {
 		}
 		rows = append(rows, userRow{ID: u.Id, Enabled: u.Enabled})
 	}
-	renderTmpl(w, r, "usermgmt.tmpl.html", map[string]any{
+	rnd.Render(w, r, "usermgmt.tmpl.html", map[string]any{
 		"Users": rows,
 		"Msg":   msg,
 	})

@@ -72,7 +72,7 @@ func emailCodeDemo() http.Handler {
 	}
 
 	r.Path("/login").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		renderTmpl(w, req, "emailcode_login.tmpl.html", map[string]any{"Emails": emailCodeLoginAddresses()})
+		rnd.Render(w, req, "emailcode_login.tmpl.html", map[string]any{"Emails": emailCodeLoginAddresses()})
 	})
 	r.Path("/login").Methods(http.MethodPost).HandlerFunc(emailCodeRequestHandler)
 
@@ -93,7 +93,7 @@ func emailCodeDemo() http.Handler {
 			http.Error(w, "session error", http.StatusInternalServerError)
 			return
 		}
-		renderTmpl(w, req, "protected.tmpl.html", map[string]any{
+		rnd.Render(w, req, "protected.tmpl.html", map[string]any{
 			"text": fmt.Sprintf("logged in passwordlessly as: %s", ud.UserId),
 		})
 	}))
@@ -113,7 +113,7 @@ func emailCodeVerifyGetHandler(w http.ResponseWriter, r *http.Request) {
 	if exists {
 		data["PlainCode"] = pending.plainCode
 	}
-	renderTmpl(w, r, "emailcode_verify.tmpl.html", data)
+	rnd.Render(w, r, "emailcode_verify.tmpl.html", data)
 }
 
 func emailCodeVerifyPostHandler(w http.ResponseWriter, r *http.Request, login *userauth.LoginHandler, sessMgr *cookieauth.Manager) {
@@ -128,7 +128,7 @@ func emailCodeVerifyPostHandler(w http.ResponseWriter, r *http.Request, login *u
 		if exists {
 			data["PlainCode"] = pending.plainCode
 		}
-		renderTmpl(w, r, "emailcode_verify.tmpl.html", data)
+		rnd.Render(w, r, "emailcode_verify.tmpl.html", data)
 	}
 
 	result, err := login.VerifyEmailCode(email, code)
@@ -151,7 +151,7 @@ func emailCodeVerifyPostHandler(w http.ResponseWriter, r *http.Request, login *u
 func emailCodeRequestHandler(w http.ResponseWriter, r *http.Request) {
 	email := strings.TrimSpace(r.FormValue("email"))
 	if email == "" {
-		renderTmpl(w, r, "emailcode_login.tmpl.html", map[string]any{
+		rnd.Render(w, r, "emailcode_login.tmpl.html", map[string]any{
 			"Error":  "Email is required.",
 			"Emails": emailCodeLoginAddresses(),
 		})
@@ -160,7 +160,7 @@ func emailCodeRequestHandler(w http.ResponseWriter, r *http.Request) {
 
 	user, err := emailCodeUsers.GetUser(email)
 	if err != nil || !user.Enabled {
-		renderTmpl(w, r, "emailcode_login.tmpl.html", map[string]any{
+		rnd.Render(w, r, "emailcode_login.tmpl.html", map[string]any{
 			"Error":  "Unknown email. Use one of the demo addresses listed below.",
 			"Email":  email,
 			"Emails": emailCodeLoginAddresses(),
@@ -170,7 +170,7 @@ func emailCodeRequestHandler(w http.ResponseWriter, r *http.Request) {
 
 	code, expiresAt, err := emailLoginCodeSvc.Generate(email)
 	if err != nil {
-		renderTmpl(w, r, "emailcode_login.tmpl.html", map[string]any{
+		rnd.Render(w, r, "emailcode_login.tmpl.html", map[string]any{
 			"Error":  "Could not generate login code.",
 			"Email":  email,
 			"Emails": emailCodeLoginAddresses(),

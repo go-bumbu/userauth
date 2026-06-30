@@ -35,7 +35,7 @@ func profileTOTPSetupHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not render QR", http.StatusInternalServerError)
 		return
 	}
-	renderTmpl(w, r, "profile_totp_setup.tmpl.html", map[string]any{
+	rnd.Render(w, r, "profile_totp_setup.tmpl.html", map[string]any{
 		"QRDataURI": qr,
 		"Secret":    key.Secret(),
 	})
@@ -55,7 +55,7 @@ func profileTOTPConfirmHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !totp.Validate(code, data.Secret) {
-		renderTmpl(w, r, "profile_totp_setup.tmpl.html", map[string]any{
+		rnd.Render(w, r, "profile_totp_setup.tmpl.html", map[string]any{
 			"Secret": data.Secret,
 			"Error":  "That code didn't match. Try again.",
 		})
@@ -83,7 +83,7 @@ func profileTOTPConfirmHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not store recovery codes", http.StatusInternalServerError)
 		return
 	}
-	renderTmpl(w, r, "profile_totp_setup.tmpl.html", map[string]any{
+	rnd.Render(w, r, "profile_totp_setup.tmpl.html", map[string]any{
 		"Success":       "Two-factor authentication is now enabled.",
 		"RecoveryCodes": plain,
 	})

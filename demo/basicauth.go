@@ -13,10 +13,10 @@ func basicAuthDemo() http.Handler {
 	login := userauth.LoginHandler{UserStore: &demoUsers}
 
 	enforceAuth := basicauth.NewHandler(login, "", true, logger)
-	r.Handle("/enforce", enforceAuth.Middleware(protectedPage("basicauth enforce mode - browser prompts for credentials when not authenticated"))).Methods(http.MethodGet)
+	r.Handle("/enforce", enforceAuth.Middleware(rnd.ProtectedPage("basicauth enforce mode - browser prompts for credentials when not authenticated"))).Methods(http.MethodGet)
 
 	silentAuth := basicauth.NewHandler(login, "", false, logger)
-	r.Handle("/silent", silentAuth.Middleware(protectedPage("basicauth silent mode - returns 401 without prompting the browser"))).Methods(http.MethodGet)
+	r.Handle("/silent", silentAuth.Middleware(rnd.ProtectedPage("basicauth silent mode - returns 401 without prompting the browser"))).Methods(http.MethodGet)
 
 	return r
 }

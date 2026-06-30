@@ -26,7 +26,7 @@ func profileLoginHandler(w http.ResponseWriter, r *http.Request) {
 	result, err := profileLogin.CanLogin(username, password)
 	if err != nil {
 		if errors.Is(err, userauth.ErrUserNotFound) || errors.Is(err, userauth.ErrUserDisabled) {
-			renderTmpl(w, r, "profile_login.tmpl.html", map[string]any{"Error": "Invalid credentials."})
+			rnd.Render(w, r, "profile_login.tmpl.html", map[string]any{"Error": "Invalid credentials."})
 			return
 		}
 		http.Error(w, "login error", http.StatusInternalServerError)
@@ -50,11 +50,11 @@ func profileLoginHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		renderTmpl(w, r, "profile_2fa.tmpl.html", map[string]any{"UserID": result.UserID})
+		rnd.Render(w, r, "profile_2fa.tmpl.html", map[string]any{"UserID": result.UserID})
 		return
 	}
 
-	renderTmpl(w, r, "profile_login.tmpl.html", map[string]any{"Error": "Invalid credentials."})
+	rnd.Render(w, r, "profile_login.tmpl.html", map[string]any{"Error": "Invalid credentials."})
 }
 
 func profile2FAHandler(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +62,7 @@ func profile2FAHandler(w http.ResponseWriter, r *http.Request) {
 	code := strings.TrimSpace(r.FormValue("code"))
 
 	if _, err := profilePendingLogins.GetPendingLogin(r, userID); err != nil {
-		renderTmpl(w, r, "profile_login.tmpl.html", map[string]any{
+		rnd.Render(w, r, "profile_login.tmpl.html", map[string]any{
 			"Error": "Login session expired, please log in again.",
 		})
 		return
@@ -73,7 +73,7 @@ func profile2FAHandler(w http.ResponseWriter, r *http.Request) {
 		res, _ = profileLogin.VerifyRecoveryCode(userID, code)
 	}
 	if !res.Authenticated {
-		renderTmpl(w, r, "profile_2fa.tmpl.html", map[string]any{
+		rnd.Render(w, r, "profile_2fa.tmpl.html", map[string]any{
 			"UserID": userID,
 			"Error":  "Invalid code, try again.",
 		})

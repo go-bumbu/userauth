@@ -31,7 +31,7 @@ var pendingEmailRegs = struct {
 
 func registerEmailHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		renderTmpl(w, r, "register_email.tmpl.html", nil)
+		rnd.Render(w, r, "register_email.tmpl.html", nil)
 		return
 	}
 
@@ -40,14 +40,14 @@ func registerEmailHandler(w http.ResponseWriter, r *http.Request) {
 	confirm := r.FormValue("confirm")
 
 	if email == "" || password == "" {
-		renderTmpl(w, r, "register_email.tmpl.html", map[string]any{
+		rnd.Render(w, r, "register_email.tmpl.html", map[string]any{
 			"Error": "Email and password are required.",
 			"Email": email,
 		})
 		return
 	}
 	if password != confirm {
-		renderTmpl(w, r, "register_email.tmpl.html", map[string]any{
+		rnd.Render(w, r, "register_email.tmpl.html", map[string]any{
 			"Error": "Passwords do not match.",
 			"Email": email,
 		})
@@ -56,7 +56,7 @@ func registerEmailHandler(w http.ResponseWriter, r *http.Request) {
 
 	code, expiresAt, err := emailCodeSvc.Generate(email)
 	if err != nil {
-		renderTmpl(w, r, "register_email.tmpl.html", map[string]any{
+		rnd.Render(w, r, "register_email.tmpl.html", map[string]any{
 			"Error": "Could not generate verification code.",
 			"Email": email,
 		})
@@ -80,7 +80,7 @@ func registerEmailVerifyHandler(w http.ResponseWriter, r *http.Request) {
 		if exists {
 			data["PlainCode"] = pending.plainCode
 		}
-		renderTmpl(w, r, "register_email_verify.tmpl.html", data)
+		rnd.Render(w, r, "register_email_verify.tmpl.html", data)
 		return
 	}
 
@@ -88,7 +88,7 @@ func registerEmailVerifyHandler(w http.ResponseWriter, r *http.Request) {
 	code := strings.TrimSpace(r.FormValue("code"))
 
 	renderErr := func(msg string) {
-		renderTmpl(w, r, "register_email_verify.tmpl.html", map[string]any{
+		rnd.Render(w, r, "register_email_verify.tmpl.html", map[string]any{
 			"Email": email,
 			"Error": msg,
 		})
@@ -124,7 +124,7 @@ func registerEmailVerifyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userIDs = append(userIDs, email)
-	renderTmpl(w, r, "register_email_verify.tmpl.html", map[string]any{
+	rnd.Render(w, r, "register_email_verify.tmpl.html", map[string]any{
 		"Email":   email,
 		"Success": "Account created. You can now log in at /profile/login.",
 	})

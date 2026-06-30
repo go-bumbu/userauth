@@ -34,11 +34,11 @@ func cookieAuthDemo() http.Handler {
 	}
 
 	protected := r.Path("/protected").Methods(http.MethodGet).Subrouter()
-	protected.Handle("", protectedPage("content protected by session cookie"))
+	protected.Handle("", rnd.ProtectedPage("content protected by session cookie"))
 	protected.Use(sessMgr.Middleware)
 
 	r.Path("/login").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		renderTmpl(w, r, "login.tmpl.html", nil)
+		rnd.Render(w, r, "login.tmpl.html", nil)
 	})
 	r.Path("/login").Methods(http.MethodPost).Handler(
 		logincookie.FormAuthHandler(sessMgr, &login, "/cookie/protected"))

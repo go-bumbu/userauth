@@ -7,7 +7,7 @@ import (
 
 func registerHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		renderTmpl(w, r, "register.tmpl.html", nil)
+		rnd.Render(w, r, "register.tmpl.html", nil)
 		return
 	}
 
@@ -16,7 +16,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	confirm := r.FormValue("confirm")
 
 	if login == "" || password == "" {
-		renderTmpl(w, r, "register.tmpl.html", map[string]any{
+		rnd.Render(w, r, "register.tmpl.html", map[string]any{
 			"Error": "Login and password are required.",
 			"Login": login,
 		})
@@ -24,7 +24,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if password != confirm {
-		renderTmpl(w, r, "register.tmpl.html", map[string]any{
+		rnd.Render(w, r, "register.tmpl.html", map[string]any{
 			"Error": "Passwords do not match.",
 			"Login": login,
 		})
@@ -32,7 +32,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := dbUserMgr.Create(login, password); err != nil {
-		renderTmpl(w, r, "register.tmpl.html", map[string]any{
+		rnd.Render(w, r, "register.tmpl.html", map[string]any{
 			"Error": err.Error(),
 			"Login": login,
 		})
@@ -40,7 +40,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userIDs = append(userIDs, login)
-	renderTmpl(w, r, "register.tmpl.html", map[string]any{
+	rnd.Render(w, r, "register.tmpl.html", map[string]any{
 		"Success": "User \"" + login + "\" registered successfully.",
 	})
 }

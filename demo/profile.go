@@ -45,7 +45,7 @@ func profileDemo() http.Handler {
 	}
 
 	r.Path("/login").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		renderTmpl(w, r, "profile_login.tmpl.html", nil)
+		rnd.Render(w, r, "profile_login.tmpl.html", nil)
 	})
 	r.Path("/login").Methods(http.MethodPost).HandlerFunc(profileLoginHandler)
 	r.Path("/login/2fa").Methods(http.MethodPost).HandlerFunc(profile2FAHandler)
@@ -89,7 +89,7 @@ func profileViewWithMsg(w http.ResponseWriter, r *http.Request, success, errMsg 
 	}
 	totpData, _ := dbUserMgr.GetTOTP(user.Id)
 	recoveryCount, _ := dbUserMgr.GetRecoveryCodesCount(user.Id)
-	renderTmpl(w, r, "profile.tmpl.html", map[string]any{
+	rnd.Render(w, r, "profile.tmpl.html", map[string]any{
 		"UserID":        user.Id,
 		"Email":         user.PrimaryEmail,
 		"Enabled":       user.Enabled,
