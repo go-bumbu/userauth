@@ -1,61 +1,13 @@
-package dbusers
+package dbuser
 
 import (
-	"log"
-	"os"
 	"testing"
-	"time"
 
 	"github.com/go-bumbu/userauth/hashutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
-
-const dbFile = "test.db"
-
-func setup(t *testing.T) *DbManager {
-
-	newLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags),
-		logger.Config{
-			SlowThreshold:             time.Second,
-			LogLevel:                  logger.Silent,
-			IgnoreRecordNotFoundError: true,
-			Colorful:                  false,
-		},
-	)
-
-	db, err := gorm.Open(sqlite.Open(dbFile), &gorm.Config{
-		Logger: newLogger,
-	})
-	if err != nil {
-		panic("failed to connect database")
-	}
-
-	opts := ManagerOpts{
-		BcryptDifficulty: bcrypt.MinCost,
-	}
-
-	mng, err := NewDbManager(db, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return mng
-
-}
-
-func clean() {
-	defer func() {
-		err := os.Remove(dbFile)
-		if err != nil {
-			panic(err)
-		}
-	}()
-}
 
 func TestCreateUser(t *testing.T) {
 

@@ -8,14 +8,14 @@ import (
 	"github.com/go-bumbu/userauth/demo/examples"
 	"github.com/go-bumbu/userauth/demo/store"
 	"github.com/go-bumbu/userauth/demo/web"
-	"github.com/go-bumbu/userauth/userstore/dbusers"
+	"github.com/go-bumbu/userauth/userstore/dbuser"
 	"github.com/gorilla/mux"
 )
 
 // Cfg holds the dependencies for the demo router.
 type Cfg struct {
 	Logger      *slog.Logger
-	Users       *dbusers.DbManager  // DB-backed store: profile, register, usersadmin
+	Users       *dbuser.Store       // DB-backed store: profile, register, usersadmin
 	Registry    *store.Registry     // shared user-id list for register + usersadmin
 	StaticUsers userauth.UserGetter // static credentials: basicauth + passwordlogin
 	Web         *web.Renderer

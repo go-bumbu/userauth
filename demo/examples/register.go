@@ -10,14 +10,14 @@ import (
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/store"
 	"github.com/go-bumbu/userauth/demo/web"
-	"github.com/go-bumbu/userauth/userstore/dbusers"
+	"github.com/go-bumbu/userauth/userstore/dbuser"
 	vcmemory "github.com/go-bumbu/userauth/verificationcode/memory"
 )
 
 // Register handles user self-registration (password-based and email-code-based).
 type Register struct {
 	log     *slog.Logger
-	users   *dbusers.DbManager
+	users   *dbuser.Store
 	reg     *store.Registry
 	rnd     *web.Renderer
 	store   *vcmemory.Store
@@ -35,7 +35,7 @@ type pendingEmailReg struct {
 }
 
 // NewRegister creates a Register and initialises its verification-code store.
-func NewRegister(log *slog.Logger, users *dbusers.DbManager, reg *store.Registry, rnd *web.Renderer) *Register {
+func NewRegister(log *slog.Logger, users *dbuser.Store, reg *store.Registry, rnd *web.Renderer) *Register {
 	a := &Register{log: log, users: users, reg: reg, rnd: rnd, store: vcmemory.New()}
 	a.codeSvc = &userauth.VerificationCodeService{Store: a.store.Store, CodeLength: 6, Expiry: 10 * time.Minute}
 	a.pending.items = make(map[string]pendingEmailReg)
@@ -168,7 +168,7 @@ func (a *Register) EmailVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.users.CreateUser(dbusers.User{
+	if err := a.users.CreateUser(dbuser.User{
 		LoginID:              email,
 		Pw:                   pending.password,
 		Enabled:              true,

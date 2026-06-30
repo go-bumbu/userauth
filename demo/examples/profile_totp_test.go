@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth/demo/store"
-	"github.com/go-bumbu/userauth/userstore/dbusers"
+	"github.com/go-bumbu/userauth/userstore/dbuser"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -16,7 +16,7 @@ var totpSecretRe = regexp.MustCompile(`totp-secret">([A-Z2-7]+)<`)
 
 // enrollTOTP logs in a fresh user (one-step), runs setup+confirm, and returns the
 // login cookies and the confirm-response recorder. Fails the test on any error.
-func enrollTOTP(t *testing.T, handler http.Handler, users *dbusers.DbManager, uid string) ([]*http.Cookie, string) {
+func enrollTOTP(t *testing.T, handler http.Handler, users *dbuser.Store, uid string) ([]*http.Cookie, string) {
 	t.Helper()
 	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)

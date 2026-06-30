@@ -18,7 +18,7 @@ import (
 	logincookie "github.com/go-bumbu/userauth/handlers/login"
 	"github.com/go-bumbu/userauth/hashutil"
 	pendingmemory "github.com/go-bumbu/userauth/pendinglogin/memory"
-	"github.com/go-bumbu/userauth/userstore/dbusers"
+	"github.com/go-bumbu/userauth/userstore/dbuser"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 	"github.com/pquerna/otp"
@@ -27,14 +27,14 @@ import (
 
 type profileApp struct {
 	log     *slog.Logger
-	users   *dbusers.DbManager
+	users   *dbuser.Store
 	rnd     *web.Renderer
 	sessMgr *cookieauth.Manager
 	login   userauth.LoginHandler
 	pending *pendingmemory.Store
 }
 
-func Profile(log *slog.Logger, users *dbusers.DbManager, rnd *web.Renderer) http.Handler {
+func Profile(log *slog.Logger, users *dbuser.Store, rnd *web.Renderer) http.Handler {
 	sesStore, err := cookieauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
 	if err != nil {
 		panic(fmt.Errorf("profile: error instantiating cookie store: %v", err))

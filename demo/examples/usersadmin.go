@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-bumbu/userauth/demo/store"
 	"github.com/go-bumbu/userauth/demo/web"
-	"github.com/go-bumbu/userauth/userstore/dbusers"
+	"github.com/go-bumbu/userauth/userstore/dbuser"
 	"github.com/gorilla/mux"
 )
 
@@ -18,13 +18,13 @@ type userRow struct {
 
 type usersAdminApp struct {
 	log   *slog.Logger
-	users *dbusers.DbManager
+	users *dbuser.Store
 	reg   *store.Registry
 	rnd   *web.Renderer
 }
 
 // UsersAdmin returns an http.Handler (a mux.Router) that manages the user-admin UI.
-func UsersAdmin(log *slog.Logger, users *dbusers.DbManager, reg *store.Registry, rnd *web.Renderer) http.Handler {
+func UsersAdmin(log *slog.Logger, users *dbuser.Store, reg *store.Registry, rnd *web.Renderer) http.Handler {
 	a := &usersAdminApp{log: log, users: users, reg: reg, rnd: rnd}
 	r := mux.NewRouter()
 	r.Path("/").Methods(http.MethodGet).HandlerFunc(a.list)
