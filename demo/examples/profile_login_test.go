@@ -1,36 +1,28 @@
-package main
+package examples
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/demo/store"
 	"github.com/pquerna/otp/totp"
 )
 
-// postProfileForm posts a urlencoded form to the profile demo handler, attaching cookies.
-func postProfileForm(handler http.Handler, path string, form url.Values, cookies []*http.Cookie) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	return w
-}
-
 func TestProfileLoginOneStepNoTOTP(t *testing.T) {
-	handler := profileDemo()
+	users, _, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := Profile(testLogger(), users, testWeb())
 	uid := "onestep@example.com"
-	if err := dbUserMgr.Create(uid, "pw"); err != nil {
+	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	w := postProfileForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
+	w := postForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
 	if w.Code != http.StatusSeeOther {
 		t.Fatalf("want 303, got %d", w.Code)
 	}
@@ -43,17 +35,21 @@ func TestProfileLoginOneStepNoTOTP(t *testing.T) {
 }
 
 func TestProfileLoginTwoStepTOTP(t *testing.T) {
-	handler := profileDemo()
+	users, _, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := Profile(testLogger(), users, testWeb())
 	const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- test TOTP secret
 	uid := "twostep@example.com"
-	if err := dbUserMgr.Create(uid, "pw"); err != nil {
+	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	if err := dbUserMgr.SetTOTP(uid, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
+	if err := users.SetTOTP(uid, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
 		t.Fatalf("set totp: %v", err)
 	}
 
-	w := postProfileForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
+	w := postForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("password step: want 200 (2FA page), got %d", w.Code)
 	}
@@ -68,7 +64,7 @@ func TestProfileLoginTwoStepTOTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate code: %v", err)
 	}
-	w = postProfileForm(handler, "/login/2fa", url.Values{"userID": {uid}, "code": {code}}, nil)
+	w = postForm(handler, "/login/2fa", url.Values{"userID": {uid}, "code": {code}}, nil)
 	if w.Code != http.StatusSeeOther {
 		t.Fatalf("2FA step: want 303, got %d", w.Code)
 	}
@@ -81,19 +77,23 @@ func TestProfileLoginTwoStepTOTP(t *testing.T) {
 }
 
 func TestProfileLoginTwoStepWrongCode(t *testing.T) {
-	handler := profileDemo()
+	users, _, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := Profile(testLogger(), users, testWeb())
 	const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- test TOTP secret
 	uid := "wrongcode@example.com"
-	if err := dbUserMgr.Create(uid, "pw"); err != nil {
+	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	if err := dbUserMgr.SetTOTP(uid, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
+	if err := users.SetTOTP(uid, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
 		t.Fatalf("set totp: %v", err)
 	}
 	// establish the pending login (password step)
-	_ = postProfileForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
+	_ = postForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
 
-	w := postProfileForm(handler, "/login/2fa", url.Values{"userID": {uid}, "code": {"000000"}}, nil)
+	w := postForm(handler, "/login/2fa", url.Values{"userID": {uid}, "code": {"000000"}}, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("wrong code: want 200 (re-render), got %d", w.Code)
 	}

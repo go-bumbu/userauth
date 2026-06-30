@@ -72,9 +72,9 @@ func demoHandler() http.Handler {
 	r.Path("/register/email/verify").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.EmailVerify)
 
 	// ===============================================
-	// User profile (self-service) — see profile.go
+	// User profile (self-service) — see examples/profile.go
 	// ===============================================
-	r.PathPrefix("/profile/").Handler(http.StripPrefix("/profile", profileDemo()))
+	r.PathPrefix("/profile/").Handler(http.StripPrefix("/profile", examples.Profile(logger, dbUserMgr, rnd)))
 
 	// ===============================================
 	// rest of the pages
