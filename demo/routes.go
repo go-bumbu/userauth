@@ -59,16 +59,17 @@ func demoHandler() http.Handler {
 	r.PathPrefix("/emailcode/").Handler(http.StripPrefix("/emailcode", examples.EmailLogin(logger, rnd)))
 
 	// ===============================================
-	// User management — see users_admin.go
+	// User management — see examples/usersadmin.go
 	// ===============================================
-	r.PathPrefix("/users/").Handler(http.StripPrefix("/users", userMgmtDemo()))
+	r.PathPrefix("/users/").Handler(http.StripPrefix("/users", examples.UsersAdmin(logger, dbUserMgr, userRegistry, rnd)))
 
 	// ===============================================
-	// User registration — see register_password.go, register_email.go
+	// User registration — see examples/register.go
 	// ===============================================
-	r.Path("/register").Methods(http.MethodGet, http.MethodPost).HandlerFunc(registerHandler)
-	r.Path("/register/email").Methods(http.MethodGet, http.MethodPost).HandlerFunc(registerEmailHandler)
-	r.Path("/register/email/verify").Methods(http.MethodGet, http.MethodPost).HandlerFunc(registerEmailVerifyHandler)
+	reg := examples.NewRegister(logger, dbUserMgr, userRegistry, rnd)
+	r.Path("/register").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.Password)
+	r.Path("/register/email").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.Email)
+	r.Path("/register/email/verify").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.EmailVerify)
 
 	// ===============================================
 	// User profile (self-service) — see profile.go

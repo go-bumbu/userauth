@@ -1,4 +1,4 @@
-package main
+package examples
 
 import (
 	"net/http"
@@ -6,10 +6,16 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/go-bumbu/userauth/demo/store"
 )
 
 func TestUserMgmtList(t *testing.T) {
-	handler := userMgmtDemo()
+	users, reg, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := UsersAdmin(testLogger(), users, reg, testWeb())
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -26,7 +32,11 @@ func TestUserMgmtList(t *testing.T) {
 }
 
 func TestUserMgmtCreate(t *testing.T) {
-	handler := userMgmtDemo()
+	users, reg, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := UsersAdmin(testLogger(), users, reg, testWeb())
 	form := url.Values{"login": {"uniquecreatetest"}, "password": {"secret"}}
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -41,7 +51,11 @@ func TestUserMgmtCreate(t *testing.T) {
 }
 
 func TestUserMgmtCreateDuplicate(t *testing.T) {
-	handler := userMgmtDemo()
+	users, reg, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := UsersAdmin(testLogger(), users, reg, testWeb())
 	form := url.Values{"login": {"admin"}, "password": {"admin"}}
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -56,7 +70,11 @@ func TestUserMgmtCreateDuplicate(t *testing.T) {
 }
 
 func TestUserMgmtDisable(t *testing.T) {
-	handler := userMgmtDemo()
+	users, reg, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := UsersAdmin(testLogger(), users, reg, testWeb())
 	req := httptest.NewRequest(http.MethodPost, "/demo/disable", nil)
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -69,7 +87,11 @@ func TestUserMgmtDisable(t *testing.T) {
 }
 
 func TestUserMgmtEnable(t *testing.T) {
-	handler := userMgmtDemo()
+	users, reg, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := UsersAdmin(testLogger(), users, reg, testWeb())
 	req := httptest.NewRequest(http.MethodPost, "/demo/enable", nil)
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
