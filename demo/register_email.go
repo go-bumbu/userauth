@@ -123,7 +123,7 @@ func registerEmailVerifyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userIDs = append(userIDs, email)
+	userRegistry.Add(email)
 	rnd.Render(w, r, "register_email_verify.tmpl.html", map[string]any{
 		"Email":   email,
 		"Success": "Account created. You can now log in at /profile/login.",

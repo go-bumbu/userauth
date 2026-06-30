@@ -1,50 +1,11 @@
 package main
 
 import (
-	"crypto/rand"
 	"net/http"
 	"strings"
 
-	"github.com/go-bumbu/userauth/userstore/dbusers"
 	"github.com/gorilla/mux"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
-
-var dbUserMgr *dbusers.DbManager
-var userIDs []string
-
-func init() {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		panic("failed to open in-memory sqlite: " + err.Error())
-	}
-	totpKey := make([]byte, 32)
-	if _, err := rand.Read(totpKey); err != nil {
-		panic("failed to generate TOTP encryption key: " + err.Error())
-	}
-	mgr, err := dbusers.NewDbManager(db, dbusers.ManagerOpts{
-		BcryptDifficulty:  4,
-		DefaultEnabled:    true,
-		TOTPEncryptionKey: totpKey,
-	})
-	if err != nil {
-		panic("failed to create db manager: " + err.Error())
-	}
-	dbUserMgr = mgr
-
-	for _, seed := range []struct{ id, pw string }{
-		{"admin", "admin"},
-		{"demo", "demo"},
-		{"admin@example.com", "admin"},
-		{"demo@example.com", "demo"},
-	} {
-		if err := dbUserMgr.Create(seed.id, seed.pw); err != nil {
-			panic("failed to seed user " + seed.id + ": " + err.Error())
-		}
-		userIDs = append(userIDs, seed.id)
-	}
-}
 
 type userRow struct {
 	ID      string
@@ -65,8 +26,9 @@ func usersListHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func usersListWithMsg(w http.ResponseWriter, r *http.Request, msg string) {
-	rows := make([]userRow, 0, len(userIDs))
-	for _, id := range userIDs {
+	ids := userRegistry.List()
+	rows := make([]userRow, 0, len(ids))
+	for _, id := range ids {
 		u, err := dbUserMgr.GetUser(id)
 		if err != nil {
 			rows = append(rows, userRow{ID: id, Enabled: false})
@@ -91,7 +53,7 @@ func usersCreateHandler(w http.ResponseWriter, r *http.Request) {
 		usersListWithMsg(w, r, "Error: "+err.Error())
 		return
 	}
-	userIDs = append(userIDs, login)
+	userRegistry.Add(login)
 	http.Redirect(w, r, "/users/", http.StatusSeeOther)
 }
 

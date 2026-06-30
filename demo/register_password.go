@@ -39,7 +39,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userIDs = append(userIDs, login)
+	userRegistry.Add(login)
 	rnd.Render(w, r, "register.tmpl.html", map[string]any{
 		"Success": "User \"" + login + "\" registered successfully.",
 	})

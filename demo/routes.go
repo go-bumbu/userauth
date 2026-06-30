@@ -4,12 +4,27 @@ import (
 	"net/http"
 
 	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/demo/store"
 	"github.com/go-bumbu/userauth/demo/web"
+	"github.com/go-bumbu/userauth/userstore/dbusers"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 	"github.com/gorilla/mux"
 )
 
 var rnd = web.New()
+
+var (
+	dbUserMgr    *dbusers.DbManager
+	userRegistry *store.Registry
+)
+
+func init() {
+	var err error
+	dbUserMgr, userRegistry, err = store.New()
+	if err != nil {
+		panic(err)
+	}
+}
 
 var demoUsers = staticusers.Users{
 	Users: []staticusers.User{
