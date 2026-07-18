@@ -1,4 +1,4 @@
-package dbuser
+package userdb
 
 import (
 	"github.com/go-bumbu/userauth"

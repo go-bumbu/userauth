@@ -1,4 +1,4 @@
-package examples
+package auth
 
 import (
 	"net/http"
@@ -7,7 +7,7 @@ import (
 )
 
 func TestBasicAuthEnforce(t *testing.T) {
-	handler := BasicAuth(testLogger(), staticDemoUsers(), testWeb())
+	handler := Basic(testLogger(), staticDemoUsers(), testWeb())
 
 	t.Run("no credentials returns 401 with WWW-Authenticate", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/enforce", nil)
@@ -43,7 +43,7 @@ func TestBasicAuthEnforce(t *testing.T) {
 }
 
 func TestBasicAuthSilent(t *testing.T) {
-	handler := BasicAuth(testLogger(), staticDemoUsers(), testWeb())
+	handler := Basic(testLogger(), staticDemoUsers(), testWeb())
 
 	t.Run("no credentials returns 401 without WWW-Authenticate", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/silent", nil)

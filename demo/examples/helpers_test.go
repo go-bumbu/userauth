@@ -8,9 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/web"
-	"github.com/go-bumbu/userauth/userstore/staticusers"
 )
 
 func testLogger() *slog.Logger {
@@ -18,14 +16,6 @@ func testLogger() *slog.Logger {
 }
 
 func testWeb() *web.Renderer { return web.New() }
-
-// staticDemoUsers returns the admin/demo static credentials used by basicauth + passwordlogin.
-func staticDemoUsers() *staticusers.Users {
-	return &staticusers.Users{Users: []staticusers.User{
-		{Id: "admin", HashPw: userauth.MustHashPw("admin"), Enabled: true},
-		{Id: "demo", HashPw: userauth.MustHashPw("demo"), Enabled: true},
-	}}
-}
 
 // postForm posts a urlencoded form to handler, attaching cookies.
 func postForm(handler http.Handler, path string, form url.Values, cookies []*http.Cookie) *httptest.ResponseRecorder {

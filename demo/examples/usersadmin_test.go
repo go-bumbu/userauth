@@ -9,7 +9,7 @@ import (
 )
 
 func TestUserMgmtList(t *testing.T) {
-	users, err := SeededStore()
+	users, err := newUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestUserMgmtList(t *testing.T) {
 }
 
 func TestUserMgmtCreate(t *testing.T) {
-	users, err := SeededStore()
+	users, err := newUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,13 +60,13 @@ func TestUserMgmtCreate(t *testing.T) {
 	if w.Code != http.StatusSeeOther {
 		t.Errorf("want 303, got %d", w.Code)
 	}
-	if w.Header().Get("Location") != "/users/" {
-		t.Errorf("want redirect to /users/, got %q", w.Header().Get("Location"))
+	if w.Header().Get("Location") != "/useradmin/" {
+		t.Errorf("want redirect to /useradmin/, got %q", w.Header().Get("Location"))
 	}
 }
 
 func TestUserMgmtCreateDuplicate(t *testing.T) {
-	users, err := SeededStore()
+	users, err := newUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestUserMgmtCreateDuplicate(t *testing.T) {
 }
 
 func TestUserMgmtDisable(t *testing.T) {
-	users, err := SeededStore()
+	users, err := newUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,13 +96,13 @@ func TestUserMgmtDisable(t *testing.T) {
 	if w.Code != http.StatusSeeOther {
 		t.Errorf("disable: want 303, got %d", w.Code)
 	}
-	if w.Header().Get("Location") != "/users/" {
-		t.Errorf("disable: want redirect to /users/, got %q", w.Header().Get("Location"))
+	if w.Header().Get("Location") != "/useradmin/" {
+		t.Errorf("disable: want redirect to /useradmin/, got %q", w.Header().Get("Location"))
 	}
 }
 
 func TestUserMgmtEnable(t *testing.T) {
-	users, err := SeededStore()
+	users, err := newUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestUserMgmtEnable(t *testing.T) {
 	if w.Code != http.StatusSeeOther {
 		t.Errorf("enable: want 303, got %d", w.Code)
 	}
-	if w.Header().Get("Location") != "/users/" {
-		t.Errorf("enable: want redirect to /users/, got %q", w.Header().Get("Location"))
+	if w.Header().Get("Location") != "/useradmin/" {
+		t.Errorf("enable: want redirect to /useradmin/, got %q", w.Header().Get("Location"))
 	}
 }

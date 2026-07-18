@@ -12,7 +12,7 @@ import (
 )
 
 func TestProfileLoginOneStepNoTOTP(t *testing.T) {
-	users, err := SeededStore()
+	users, err := newUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestProfileLoginOneStepNoTOTP(t *testing.T) {
 }
 
 func TestProfileLoginTwoStepTOTP(t *testing.T) {
-	users, err := SeededStore()
+	users, err := newUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestProfileLoginTwoStepTOTP(t *testing.T) {
 }
 
 func TestProfileLoginTwoStepWrongCode(t *testing.T) {
-	users, err := SeededStore()
+	users, err := newUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}

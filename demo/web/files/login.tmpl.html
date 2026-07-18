@@ -7,7 +7,10 @@
 </head>
 <body>
 <h3><a href="/">Home</a></h3>
-<form action="/cookie/login" method="POST" class="login-form">
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+<form action="/password/login" method="POST" class="login-form">
     <label for="username">Username</label>
     <input
             id="username"

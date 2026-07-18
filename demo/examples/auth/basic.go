@@ -1,4 +1,7 @@
-package examples
+// Package auth holds the demo examples for authentication methods: handlers
+// that authenticate each request (basic auth, trusted header, cookie session)
+// as opposed to login flows that establish a session.
+package auth
 
 import (
 	"log/slog"
@@ -10,7 +13,10 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func BasicAuth(log *slog.Logger, users userauth.UserGetter, rnd *web.Renderer) http.Handler {
+// Basic demonstrates HTTP Basic authentication in two modes: "enforce"
+// sends a WWW-Authenticate challenge so the browser pops up a credentials
+// prompt, while "silent" returns 401 without prompting.
+func Basic(log *slog.Logger, users userauth.UserGetter, rnd *web.Renderer) http.Handler {
 	r := mux.NewRouter()
 	login := userauth.LoginHandler{UserStore: users}
 

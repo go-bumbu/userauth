@@ -7,99 +7,76 @@ import (
 	"github.com/go-bumbu/userauth/hashutil"
 )
 
-func TestStoreAndVerify(t *testing.T) {
+func TestStoreAndConsume(t *testing.T) {
 	s := New()
-
-	code := "123456"
-	hash := hashutil.HashCodeSHA256(code)
-	expires := time.Now().Add(15 * time.Minute)
-
-	err := s.Store("user1", hash, expires)
-	if err != nil {
-		t.Fatalf("Store failed: %v", err)
-	}
-
-	ok, err := s.VerifyEmailCode("user1", code)
-	if err != nil {
-		t.Fatalf("VerifyEmailCode error: %v", err)
-	}
-	if !ok {
-		t.Fatal("expected verification to succeed")
-	}
-}
-
-func TestVerify_ConsumesCode(t *testing.T) {
-	s := New()
-
-	code := "123456"
-	hash := hashutil.HashCodeSHA256(code)
-	expires := time.Now().Add(15 * time.Minute)
-	_ = s.Store("user1", hash, expires)
-
-	ok, _ := s.VerifyEmailCode("user1", code)
-	if !ok {
-		t.Fatal("first verify should succeed")
-	}
-
-	ok, _ = s.VerifyEmailCode("user1", code)
-	if ok {
-		t.Fatal("second verify should fail — code consumed")
-	}
-}
-
-func TestVerify_Expired(t *testing.T) {
-	s := New()
-
-	code := "123456"
-	hash := hashutil.HashCodeSHA256(code)
-	expires := time.Now().Add(-1 * time.Minute) // already expired
-	_ = s.Store("user1", hash, expires)
-
-	ok, _ := s.VerifyEmailCode("user1", code)
-	if ok {
-		t.Fatal("expired code should not verify")
-	}
-}
-
-func TestVerify_WrongCode(t *testing.T) {
-	s := New()
-
 	hash := hashutil.HashCodeSHA256("123456")
-	expires := time.Now().Add(15 * time.Minute)
-	_ = s.Store("user1", hash, expires)
-
-	ok, _ := s.VerifyEmailCode("user1", "000000")
-	if ok {
-		t.Fatal("wrong code should not verify")
+	if err := s.StoreCode("user1", hash, time.Now().Add(15*time.Minute)); err != nil {
+		t.Fatalf("StoreCode failed: %v", err)
+	}
+	ok, err := s.ConsumeCode("user1", hash)
+	if err != nil {
+		t.Fatalf("ConsumeCode error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected consume to succeed")
 	}
 }
 
-func TestVerify_UnknownUser(t *testing.T) {
+func TestConsume_OneTime(t *testing.T) {
 	s := New()
+	hash := hashutil.HashCodeSHA256("123456")
+	_ = s.StoreCode("user1", hash, time.Now().Add(15*time.Minute))
 
-	ok, _ := s.VerifyEmailCode("nobody", "123456")
-	if ok {
-		t.Fatal("unknown user should not verify")
+	if ok, _ := s.ConsumeCode("user1", hash); !ok {
+		t.Fatal("first consume should succeed")
+	}
+	if ok, _ := s.ConsumeCode("user1", hash); ok {
+		t.Fatal("second consume should fail — code consumed")
 	}
 }
 
-func TestStore_OverwritesPrevious(t *testing.T) {
+func TestConsume_Expired(t *testing.T) {
 	s := New()
+	hash := hashutil.HashCodeSHA256("123456")
+	_ = s.StoreCode("user1", hash, time.Now().Add(-1*time.Minute))
 
+	if ok, _ := s.ConsumeCode("user1", hash); ok {
+		t.Fatal("expired code should not consume")
+	}
+}
+
+func TestConsume_WrongHash(t *testing.T) {
+	s := New()
+	_ = s.StoreCode("user1", hashutil.HashCodeSHA256("123456"), time.Now().Add(15*time.Minute))
+
+	if ok, _ := s.ConsumeCode("user1", hashutil.HashCodeSHA256("000000")); ok {
+		t.Fatal("wrong hash should not consume")
+	}
+
+	// A wrong attempt must not consume the still-valid code.
+	if ok, _ := s.ConsumeCode("user1", hashutil.HashCodeSHA256("123456")); !ok {
+		t.Fatal("correct code should still consume after a wrong attempt")
+	}
+}
+
+func TestConsume_UnknownUser(t *testing.T) {
+	s := New()
+	if ok, _ := s.ConsumeCode("nobody", hashutil.HashCodeSHA256("123456")); ok {
+		t.Fatal("unknown user should not consume")
+	}
+}
+
+func TestStoreCode_OverwritesPrevious(t *testing.T) {
+	s := New()
 	hash1 := hashutil.HashCodeSHA256("111111")
 	hash2 := hashutil.HashCodeSHA256("222222")
-	expires := time.Now().Add(15 * time.Minute)
+	_ = s.StoreCode("user1", hash1, time.Now().Add(15*time.Minute))
+	_ = s.StoreCode("user1", hash2, time.Now().Add(15*time.Minute))
 
-	_ = s.Store("user1", hash1, expires)
-	_ = s.Store("user1", hash2, expires)
-
-	ok, _ := s.VerifyEmailCode("user1", "111111")
-	if ok {
-		t.Fatal("old code should not verify after overwrite")
+	if ok, _ := s.ConsumeCode("user1", hash1); ok {
+		t.Fatal("old code should not consume after overwrite")
 	}
-
-	ok, _ = s.VerifyEmailCode("user1", "222222")
-	if !ok {
-		t.Fatal("new code should verify")
+	if ok, _ := s.ConsumeCode("user1", hash2); !ok {
+		t.Fatal("new code should consume")
 	}
 }

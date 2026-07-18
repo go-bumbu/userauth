@@ -143,14 +143,20 @@ type RecoveryCodeCountGetter interface {
 	GetRecoveryCodesCount(userID string) (int, error)
 }
 
-// EmailCodeVerifier verifies a one-time email verification code at login.
-type EmailCodeVerifier interface {
-	VerifyEmailCode(userID, code string) (bool, error)
+// CodeStore persists hashed one-time codes and consumes them atomically.
+// Implementations are pure persistence: they never generate or hash codes.
+type CodeStore interface {
+	// StoreCode saves the hash for userID, replacing any previous code.
+	StoreCode(userID, hash string, expiresAt time.Time) error
+	// ConsumeCode atomically checks for a non-expired matching hash and, on
+	// success, deletes it (one-time use). It returns false if the code is
+	// absent, expired, or does not match.
+	ConsumeCode(userID, hash string) (bool, error)
 }
 
-// SMSCodeVerifier verifies a one-time SMS verification code at login.
-type SMSCodeVerifier interface {
-	VerifySMSCode(userID, code string) (bool, error)
+// CodeVerifier verifies a one-time code at login (email, SMS, …).
+type CodeVerifier interface {
+	Verify(userID, code string) (bool, error)
 }
 
 // Deliverer sends a verification code to a recipient. The interface is
@@ -167,8 +173,8 @@ type LoginHandler struct {
 	SecondFactors SecondFactorProvider // optional; when set, used to determine Requires2FA and available second factors
 	TOTP          TOTPGetter           // optional; when set and in AvailableSecondFactors, login can use TOTP
 	RecoveryCode  RecoveryCodeVerifier // optional; when set, login can use recovery codes (typically alongside TOTP)
-	EmailCode     EmailCodeVerifier    // optional; verify email verification code
-	SMSCode       SMSCodeVerifier      // optional; verify SMS verification code
+	EmailCode     CodeVerifier         // optional; verify a one-time email code
+	SMSCode       CodeVerifier         // optional; verify a one-time SMS code
 }
 
 type LoginResult struct {
@@ -253,7 +259,7 @@ func (lh *LoginHandler) VerifyEmailCode(userID, code string) (LoginResult, error
 	if lh.EmailCode == nil {
 		return LoginResult{}, fmt.Errorf("email verification not configured")
 	}
-	ok, err := lh.EmailCode.VerifyEmailCode(userID, code)
+	ok, err := lh.EmailCode.Verify(userID, code)
 	if err != nil {
 		return LoginResult{Authenticated: false}, err
 	}
@@ -271,7 +277,7 @@ func (lh *LoginHandler) VerifySMSCode(userID, code string) (LoginResult, error) 
 	if lh.SMSCode == nil {
 		return LoginResult{}, fmt.Errorf("SMS verification not configured")
 	}
-	ok, err := lh.SMSCode.VerifySMSCode(userID, code)
+	ok, err := lh.SMSCode.Verify(userID, code)
 	if err != nil {
 		return LoginResult{Authenticated: false}, err
 	}
@@ -300,24 +306,54 @@ func MustHashPw(pw string) string {
 	return hashutil.MustHashPassword(pw)
 }
 
-// VerificationCodeService generates and stores one-time verification codes (email, SMS).
-// It separates domain logic (code length, expiry, hashing) from storage.
+const (
+	defaultCodeLength = 6
+	defaultCodeExpiry = 10 * time.Minute
+)
+
+// VerificationCodeService owns one-time code policy: generation, SHA-256 hashing,
+// expiry, and opinionated defaults. Persistence is delegated to a CodeStore.
 type VerificationCodeService struct {
-	Store      func(userID, hash string, expiresAt time.Time) error
+	store   CodeStore
+	codeLen int
+	expiry  time.Duration
+}
+
+// VerificationCodeOpts configures a VerificationCodeService. Zero-valued fields
+// fall back to the package defaults (length 6, 10-minute expiry).
+type VerificationCodeOpts struct {
 	CodeLength int
 	Expiry     time.Duration
 }
 
-// Generate creates a new numeric code, hashes it with SHA-256, stores it, and returns the plain code and expiry.
-func (s *VerificationCodeService) Generate(userID string) (string, time.Time, error) {
-	code, err := hashutil.GenerateNumericCode(s.CodeLength)
+// NewVerificationCodeService wires the service to a CodeStore and applies the
+// opinionated defaults for any zero-valued option.
+func NewVerificationCodeService(store CodeStore, opts VerificationCodeOpts) *VerificationCodeService {
+	if opts.CodeLength <= 0 {
+		opts.CodeLength = defaultCodeLength
+	}
+	if opts.Expiry <= 0 {
+		opts.Expiry = defaultCodeExpiry
+	}
+	return &VerificationCodeService{store: store, codeLen: opts.CodeLength, expiry: opts.Expiry}
+}
+
+// Generate creates a numeric code, hashes it (SHA-256), stores the hash, and
+// returns the plaintext code and its expiry for the caller to deliver.
+func (s *VerificationCodeService) Generate(userID string) (code string, expiresAt time.Time, err error) {
+	code, err = hashutil.GenerateNumericCode(s.codeLen)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	expiresAt := time.Now().UTC().Add(s.Expiry)
-	hash := hashutil.HashCodeSHA256(code)
-	if err := s.Store(userID, hash, expiresAt); err != nil {
+	expiresAt = time.Now().UTC().Add(s.expiry)
+	if err = s.store.StoreCode(userID, hashutil.HashCodeSHA256(code), expiresAt); err != nil {
 		return "", time.Time{}, err
 	}
 	return code, expiresAt, nil
+}
+
+// Verify hashes the submitted code and asks the store to consume a match.
+// It implements CodeVerifier.
+func (s *VerificationCodeService) Verify(userID, code string) (bool, error) {
+	return s.store.ConsumeCode(userID, hashutil.HashCodeSHA256(code))
 }

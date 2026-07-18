@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -9,16 +10,18 @@ import (
 	"syscall"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/demo/examples"
 	"github.com/go-bumbu/userauth/demo/router"
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
+	"github.com/go-bumbu/userauth/userstore/userdb"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func main() {
 	logger := newLogger()
 
-	users, err := examples.SeededStore()
+	users, err := newUserStore()
 	if err != nil {
 		panic(fmt.Errorf("init store: %w", err))
 	}
@@ -48,6 +51,38 @@ func main() {
 	<-signalChan
 	logger.Info("Signal received, shutting down...")
 	_ = srv.Close()
+}
+
+var demoSeedAccounts = []struct{ id, pw string }{
+	{"admin", "admin"},
+	{"demo", "demo"},
+	{"admin@example.com", "admin"},
+	{"demo@example.com", "demo"},
+}
+
+func newUserStore() (*userdb.Store, error) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("open in-memory sqlite: %w", err)
+	}
+	totpKey := make([]byte, 32)
+	if _, err := rand.Read(totpKey); err != nil {
+		return nil, fmt.Errorf("generate TOTP encryption key: %w", err)
+	}
+	mgr, err := userdb.New(db, userdb.Opts{
+		BcryptDifficulty:  4,
+		DefaultEnabled:    true,
+		TOTPEncryptionKey: totpKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create db store: %w", err)
+	}
+	for _, a := range demoSeedAccounts {
+		if err := mgr.Create(a.id, a.pw); err != nil {
+			return nil, fmt.Errorf("seed user %s: %w", a.id, err)
+		}
+	}
+	return mgr, nil
 }
 
 func newLogger() *slog.Logger {

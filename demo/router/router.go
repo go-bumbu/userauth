@@ -6,36 +6,55 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/examples"
+	"github.com/go-bumbu/userauth/demo/examples/auth"
+	"github.com/go-bumbu/userauth/demo/examples/login"
 	"github.com/go-bumbu/userauth/demo/web"
-	"github.com/go-bumbu/userauth/userstore/dbuser"
+	"github.com/go-bumbu/userauth/userstore/userdb"
 	"github.com/gorilla/mux"
 )
 
-// Cfg holds the dependencies for the demo router.
 type Cfg struct {
-	Logger      *slog.Logger
-	Users       *dbuser.Store       // DB-backed store: profile, register, usersadmin
-	StaticUsers userauth.UserGetter // static credentials: basicauth + passwordlogin
-	Web         *web.Renderer
+	Logger      *slog.Logger        // structured logger handed to every example
+	Users       *userdb.Store       // DB-backed store, used by profile, register, usersadmin
+	StaticUsers userauth.UserGetter // static (in-memory) credentials, used by basicauth, headerauth + passwordlogin
+	Web         *web.Renderer       // server-side template renderer and static-asset server
 }
 
-// New builds the top-level demo HTTP handler, mounting each library example.
 func New(cfg Cfg) http.Handler {
 	r := mux.NewRouter()
 
-	r.PathPrefix("/basic/").Handler(http.StripPrefix("/basic", examples.BasicAuth(cfg.Logger, cfg.StaticUsers, cfg.Web)))
-	r.PathPrefix("/cookie/").Handler(http.StripPrefix("/cookie", examples.PasswordLogin(cfg.Logger, cfg.StaticUsers, cfg.Web)))
-	r.PathPrefix("/header/").Handler(http.StripPrefix("/header", examples.HeaderAuth(cfg.Logger, cfg.Web)))
-	r.PathPrefix("/emailcode/").Handler(http.StripPrefix("/emailcode", examples.EmailLogin(cfg.Logger, cfg.Web)))
-	r.PathPrefix("/users/").Handler(http.StripPrefix("/users", examples.UsersAdmin(cfg.Logger, cfg.Users, cfg.Web)))
+	// authentication methods: each request is authenticated on its own
 
+	// protect with HTTP Basic auth middleware (browser prompts for credentials)
+	r.PathPrefix("/basic/").Handler(http.StripPrefix("/basic", auth.Basic(cfg.Logger, cfg.StaticUsers, cfg.Web)))
+
+	// protect with trusted-header auth middleware (identity injected by a reverse proxy)
+	r.PathPrefix("/header/").Handler(http.StripPrefix("/header", auth.Header(cfg.Logger, cfg.Web)))
+
+	// protect with an encrypted cookie session (the session itself, isolated from any login flow)
+	r.PathPrefix("/cookie/").Handler(http.StripPrefix("/cookie", auth.Cookie(cfg.Logger, cfg.Web)))
+
+	// login flows: credentials are verified once and a cookie session is established
+
+	// password form login
+	r.PathPrefix("/password/").Handler(http.StripPrefix("/password", login.Password(cfg.Logger, cfg.StaticUsers, cfg.Web)))
+
+	// passwordless login via a one-time code "emailed" to the user
+	r.PathPrefix("/emailcode/").Handler(http.StripPrefix("/emailcode", login.Email(cfg.Logger, cfg.Web)))
+
+	// self-registration: password-based and email-code-based sign-up
 	reg := examples.NewRegister(cfg.Logger, cfg.Users, cfg.Web)
 	r.Path("/register").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.Password)
 	r.Path("/register/email").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.Email)
 	r.Path("/register/email/verify").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.EmailVerify)
 
+	// authenticated self-service area: password/email change and TOTP 2FA
 	r.PathPrefix("/profile/").Handler(http.StripPrefix("/profile", examples.Profile(cfg.Logger, cfg.Users, cfg.Web)))
 
+	// admin user management: list and manage the accounts in the DB store
+	r.PathPrefix("/useradmin/").Handler(http.StripPrefix("/useradmin", examples.UsersAdmin(cfg.Logger, cfg.Users, cfg.Web)))
+
+	// shared assets and the landing page
 	r.Path("/styles.css").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		cfg.Web.Render(w, req, "styles.css", nil)
 	})

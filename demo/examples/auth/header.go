@@ -1,4 +1,4 @@
-package examples
+package auth
 
 import (
 	"fmt"
@@ -10,7 +10,11 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func HeaderAuth(log *slog.Logger, rnd *web.Renderer) http.Handler {
+// Header demonstrates authentication from a trusted request header
+// (X-User-Auth), the pattern used behind a reverse proxy that injects the
+// already-authenticated user's identity. The proxy owns the trust decision:
+// the deployment must guarantee clients cannot set the header themselves.
+func Header(log *slog.Logger, rnd *web.Renderer) http.Handler {
 	r := mux.NewRouter()
 	hauth := headerauth.New(headerauth.UserAuthHeader, true, log)
 

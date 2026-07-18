@@ -1,4 +1,4 @@
-package examples
+package login
 
 import (
 	"net/http"
@@ -11,23 +11,36 @@ import (
 
 var emailCodeRe = regexp.MustCompile(`email-code">(\d{6})<`)
 
+// TestEmailCodeRequestUnknownEmail asserts the anti-enumeration property of the
+// library handler: an unknown email gets exactly the same redirect as a known
+// one, so the endpoint cannot be used to probe which accounts exist. No code is
+// issued, so the subsequent verify page simply has none to show.
 func TestEmailCodeRequestUnknownEmail(t *testing.T) {
-	handler := EmailLogin(testLogger(), testWeb())
+	handler := Email(testLogger(), testWeb())
 	form := url.Values{"email": {"nobody@example.com"}}
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("unknown email: want 200 (error page), got %d", w.Code)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("unknown email: want 303 (same as known email), got %d", w.Code)
 	}
-	if !strings.Contains(w.Body.String(), "Unknown email") {
-		t.Errorf("want 'Unknown email' in body; got %s", w.Body.String())
+	loc := w.Header().Get("Location")
+	if !strings.HasPrefix(loc, "/emailcode/login/verify") {
+		t.Errorf("want redirect to /emailcode/login/verify..., got %q", loc)
+	}
+
+	// The verify page must not contain a login code for the unknown address.
+	req = httptest.NewRequest(http.MethodGet, "/login/verify?email=nobody@example.com", nil)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if m := emailCodeRe.FindStringSubmatch(w.Body.String()); m != nil {
+		t.Errorf("no code should be issued for an unknown email; found %q", m[1])
 	}
 }
 
 func TestEmailCodeRequestValidEmail(t *testing.T) {
-	handler := EmailLogin(testLogger(), testWeb())
+	handler := Email(testLogger(), testWeb())
 	form := url.Values{"email": {"demo@example.com"}}
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -43,7 +56,7 @@ func TestEmailCodeRequestValidEmail(t *testing.T) {
 }
 
 func TestEmailCodeLoginHappyPath(t *testing.T) {
-	handler := EmailLogin(testLogger(), testWeb())
+	handler := Email(testLogger(), testWeb())
 
 	// Step 1: request a code.
 	form := url.Values{"email": {"demo@example.com"}}
@@ -98,7 +111,7 @@ func TestEmailCodeLoginHappyPath(t *testing.T) {
 }
 
 func TestEmailCodeLoginWrongCode(t *testing.T) {
-	handler := EmailLogin(testLogger(), testWeb())
+	handler := Email(testLogger(), testWeb())
 
 	// Request a code so a pending entry exists.
 	form := url.Values{"email": {"admin@example.com"}}

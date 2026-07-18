@@ -25,10 +25,10 @@
             <td>{{.ID}}</td>
             <td>{{if .Enabled}}enabled{{else}}disabled{{end}}</td>
             <td>
-                <form method="POST" action="/users/{{.ID}}/enable" style="display:inline">
+                <form method="POST" action="/useradmin/{{.ID}}/enable" style="display:inline">
                     <button type="submit">Enable</button>
                 </form>
-                <form method="POST" action="/users/{{.ID}}/disable" style="display:inline">
+                <form method="POST" action="/useradmin/{{.ID}}/disable" style="display:inline">
                     <button type="submit">Disable</button>
                 </form>
             </td>
@@ -38,13 +38,13 @@
 </table>
 
 <div class="pagination">
-    {{if .HasPrev}}<a href="/users/?page={{.PrevPage}}">← Prev</a>{{end}}
+    {{if .HasPrev}}<a href="/useradmin/?page={{.PrevPage}}">← Prev</a>{{end}}
     <span>Page {{.Page}} of {{.TotalPages}}</span>
-    {{if .HasNext}}<a href="/users/?page={{.NextPage}}">Next →</a>{{end}}
+    {{if .HasNext}}<a href="/useradmin/?page={{.NextPage}}">Next →</a>{{end}}
 </div>
 
 <h4>Create User</h4>
-<form method="POST" action="/users/" class="login-form">
+<form method="POST" action="/useradmin/" class="login-form">
     <label for="login">Login ID</label>
     <input id="login" type="text" name="login" required>
     <label for="password">Password</label>

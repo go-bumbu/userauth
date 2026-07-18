@@ -1,4 +1,4 @@
-package dbuser
+package userdb
 
 import (
 	"testing"

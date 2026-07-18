@@ -19,25 +19,56 @@
 
     <div class="tab-content auth-content">
         <p>Static users (no database): <i>admin:admin</i> or <i>demo:demo</i></p>
+
+        <h4>Authentication methods</h4>
+        <p class="info">
+            Every request is authenticated on its own — no login step, no session.
+        </p>
         <p>Basic Auth</p>
         <ul>
             <p class="info">
                 Verifies credentials on every request via the Authorization header.
-                No session is created.
             </p>
             <li><a href="/basic/enforce">/basic/enforce</a> - browser prompts for credentials when not authenticated</li>
             <li><a href="/basic/silent">/basic/silent</a> - returns 401 silently, no browser prompt, if no credentials are provided</li>
         </ul>
 
+        <p>HTTP Header</p>
+        <ul>
+            <p class="info">
+                Delegates authentication to an upstream service that sets the X-User-Auth header.
+            </p>
+            <p class="info">
+                Test with: <code>curl -H "X-User-Auth: demo" http://localhost:8084/header/protected</code>
+            </p>
+            <li><a href="/header/protected">/header/protected</a> - header-protected page</li>
+        </ul>
+
+        <p>Cookie session</p>
+        <ul>
+            <p class="info">
+                Authenticates each request from an encrypted session cookie. Shown in
+                isolation: /start logs in a fixed demo user without any credential check —
+                the login flows below show real verification in front of the same session.
+            </p>
+            <li><a href="/cookie/start">/cookie/start</a> - start a session (no credential check, demo only)</li>
+            <li><a href="/cookie/protected">/cookie/protected</a> - cookie-protected page</li>
+            <li><a href="/cookie/end">/cookie/end</a> - end the session</li>
+        </ul>
+
+        <h4>Login flows</h4>
+        <p class="info">
+            Credentials are verified once and an encrypted cookie session is established;
+            protected pages check that cookie.
+        </p>
         <p>Password</p>
         <ul>
             <p class="info">
-                Log in with a username and password. On success it creates an encrypted
-                cookie to store the auth session; protected pages check that cookie.
+                Log in with a username and password.
             </p>
-            <li><a href="/cookie/login">/cookie/login</a> - login form (JSON endpoint is also supported)</li>
-            <li><a href="/cookie/protected">/cookie/protected</a> - cookie-protected page</li>
-            <li><a href="/cookie/logout">/cookie/logout</a> - logout (invalidate the cookie)</li>
+            <li><a href="/password/login">/password/login</a> - login form (JSON endpoint is also supported)</li>
+            <li><a href="/password/protected">/password/protected</a> - session-protected page</li>
+            <li><a href="/password/logout">/password/logout</a> - logout (invalidate the session cookie)</li>
         </ul>
 
         <p>Passwordless (email code)</p>
@@ -50,17 +81,6 @@
             <li><a href="/emailcode/login">/emailcode/login</a> - request a login code</li>
             <li><a href="/emailcode/protected">/emailcode/protected</a> - cookie-protected page</li>
             <li><a href="/emailcode/logout">/emailcode/logout</a> - logout</li>
-        </ul>
-
-        <p>HTTP Header</p>
-        <ul>
-            <p class="info">
-                Delegates authentication to an upstream service that sets the X-User-Auth header.
-            </p>
-            <p class="info">
-                Test with: <code>curl -H "X-User-Auth: demo" http://localhost:8084/header/protected</code>
-            </p>
-            <li><a href="/header/protected">/header/protected</a> - header-protected page</li>
         </ul>
     </div>
 
@@ -86,7 +106,7 @@
             <p class="info">
                 Create users and toggle their enabled state.
             </p>
-            <li><a href="/users/">/users/</a> - list, create, enable/disable users</li>
+            <li><a href="/useradmin/">/useradmin/</a> - list, create, enable/disable users</li>
         </ul>
 
         <p>My Profile</p>

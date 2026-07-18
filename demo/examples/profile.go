@@ -3,12 +3,12 @@ package examples
 import (
 	"bytes"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"html/template"
 	"image/png"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,24 +17,28 @@ import (
 	"github.com/go-bumbu/userauth/handlers/auth/cookieauth"
 	logincookie "github.com/go-bumbu/userauth/handlers/login"
 	"github.com/go-bumbu/userauth/hashutil"
-	pendingmemory "github.com/go-bumbu/userauth/pendinglogin/memory"
-	"github.com/go-bumbu/userauth/userstore/dbuser"
+	"github.com/go-bumbu/userauth/loginflow"
+	flowmemory "github.com/go-bumbu/userauth/loginflow/memory"
+	"github.com/go-bumbu/userauth/userstore/userdb"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 )
 
+// profileApp holds the dependencies shared by the profile handlers.
 type profileApp struct {
 	log     *slog.Logger
-	users   *dbuser.Store
+	users   *userdb.Store
 	rnd     *web.Renderer
 	sessMgr *cookieauth.Manager
-	login   userauth.LoginHandler
-	pending *pendingmemory.Store
+	flow    *loginflow.Flow
 }
 
-func Profile(log *slog.Logger, users *dbuser.Store, rnd *web.Renderer) http.Handler {
+// Profile demonstrates an authenticated self-service area backed by the
+// userdb.Store: cookie-session password login with an optional TOTP second
+// factor and recovery codes, plus password, email, and two-factor management.
+func Profile(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Handler {
 	sesStore, err := cookieauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
 	if err != nil {
 		panic(fmt.Errorf("profile: error instantiating cookie store: %v", err))
@@ -51,18 +55,43 @@ func Profile(log *slog.Logger, users *dbuser.Store, rnd *web.Renderer) http.Hand
 	if err != nil {
 		panic("profile: error instantiating session manager")
 	}
+	// password first; when the user has TOTP enabled, either an authenticator
+	// code or a recovery code completes the login. A PolicyFunc is used
+	// because the requirement is dynamic (per-user enrolment) and offers an
+	// alternative (recovery) that is not a second factor in its own right.
+	policy := loginflow.PolicyFunc(func(user userauth.User, satisfied []string) (bool, []string, error) {
+		if !slices.Contains(satisfied, loginflow.MethodPassword) {
+			return false, []string{loginflow.MethodPassword}, nil
+		}
+		totpData, err := users.GetTOTP(user.Id)
+		if err != nil {
+			return false, nil, err
+		}
+		if !totpData.Enabled ||
+			slices.Contains(satisfied, loginflow.MethodTOTP) ||
+			slices.Contains(satisfied, loginflow.MethodRecovery) {
+			return true, nil, nil
+		}
+		return false, []string{loginflow.MethodTOTP, loginflow.MethodRecovery}, nil
+	})
+
 	a := &profileApp{
 		log:     log,
 		users:   users,
 		rnd:     rnd,
 		sessMgr: sessMgr,
-		login: userauth.LoginHandler{
-			UserStore:     users,
-			SecondFactors: users,
-			TOTP:          users,
-			RecoveryCode:  users,
+		flow: &loginflow.Flow{
+			Users: users,
+			Methods: []loginflow.Method{
+				loginflow.PasswordMethod{Users: users},
+				loginflow.TOTPMethod{TOTP: users},
+				loginflow.RecoveryMethod{Codes: users},
+			},
+			Policy:   policy,
+			Attempts: flowmemory.New(),
+			Session:  sessMgr,
+			Logger:   log,
 		},
-		pending: pendingmemory.New(),
 	}
 
 	r := mux.NewRouter()
@@ -81,6 +110,7 @@ func Profile(log *slog.Logger, users *dbuser.Store, rnd *web.Renderer) http.Hand
 	return r
 }
 
+// requireAuth wraps a handler so unauthenticated requests are redirected to the login page.
 func (a *profileApp) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if ok, _ := a.sessMgr.HandleAuth(w, r); ok {
@@ -91,10 +121,12 @@ func (a *profileApp) requireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// view renders the profile page.
 func (a *profileApp) view(w http.ResponseWriter, r *http.Request) {
 	a.viewWithMsg(w, r, "", "")
 }
 
+// viewWithMsg renders the profile page with an optional success or error banner.
 func (a *profileApp) viewWithMsg(w http.ResponseWriter, r *http.Request, success, errMsg string) {
 	ud, err := cookieauth.CtxGetUserData(r)
 	if err != nil {
@@ -119,6 +151,7 @@ func (a *profileApp) viewWithMsg(w http.ResponseWriter, r *http.Request, success
 	})
 }
 
+// changePassword verifies the current password and replaces the stored hash.
 func (a *profileApp) changePassword(w http.ResponseWriter, r *http.Request) {
 	ud, err := cookieauth.CtxGetUserData(r)
 	if err != nil {
@@ -162,6 +195,7 @@ func (a *profileApp) changePassword(w http.ResponseWriter, r *http.Request) {
 	a.viewWithMsg(w, r, "Password updated successfully.", "")
 }
 
+// changeEmail updates the user's primary email (which clears its verified flag in the store).
 func (a *profileApp) changeEmail(w http.ResponseWriter, r *http.Request) {
 	ud, err := cookieauth.CtxGetUserData(r)
 	if err != nil {
@@ -182,75 +216,61 @@ func (a *profileApp) changeEmail(w http.ResponseWriter, r *http.Request) {
 	a.viewWithMsg(w, r, "Email updated successfully.", "")
 }
 
+// loginPost submits the password factor to the flow, branching to the 2FA
+// prompt when the policy demands a second factor and redirecting into the
+// profile when the login is complete.
 func (a *profileApp) loginPost(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(r.FormValue("username"))
 	password := r.FormValue("password")
 
-	result, err := a.login.CanLogin(username, password)
+	res, err := a.flow.Submit(r, w, username, loginflow.MethodPassword, password, false)
 	if err != nil {
-		if errors.Is(err, userauth.ErrUserNotFound) || errors.Is(err, userauth.ErrUserDisabled) {
-			a.rnd.Render(w, r, "profile_login.tmpl.html", map[string]any{"Error": "Invalid credentials."})
-			return
-		}
 		http.Error(w, "login error", http.StatusInternalServerError)
 		return
 	}
-
-	if result.Authenticated {
-		if err := a.sessMgr.LoginUser(r, w, result.UserID, false); err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, r, "/profile/", http.StatusSeeOther)
+	if !res.OK {
+		a.rnd.Render(w, r, "profile_login.tmpl.html", map[string]any{"Error": "Invalid credentials."})
 		return
 	}
-
-	if result.Requires2FA {
-		if err := a.pending.SetPendingLogin(r, w, logincookie.PendingLogin{
-			UserID:    result.UserID,
-			ExpiresAt: time.Now().Add(5 * time.Minute),
-		}); err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		a.rnd.Render(w, r, "profile_2fa.tmpl.html", map[string]any{"UserID": result.UserID})
+	if !res.Done {
+		a.rnd.Render(w, r, "profile_2fa.tmpl.html", map[string]any{"UserID": username})
 		return
 	}
-
-	a.rnd.Render(w, r, "profile_login.tmpl.html", map[string]any{"Error": "Invalid credentials."})
+	http.Redirect(w, r, "/profile/", http.StatusSeeOther)
 }
 
+// verify2FA submits the second factor: the code is tried as TOTP first and as
+// a recovery code otherwise; the flow completes the session on success.
 func (a *profileApp) verify2FA(w http.ResponseWriter, r *http.Request) {
 	userID := strings.TrimSpace(r.FormValue("userID"))
 	code := strings.TrimSpace(r.FormValue("code"))
 
-	if _, err := a.pending.GetPendingLogin(r, userID); err != nil {
-		a.rnd.Render(w, r, "profile_login.tmpl.html", map[string]any{
-			"Error": "Login session expired, please log in again.",
-		})
+	res, err := a.flow.Submit(r, w, userID, loginflow.MethodTOTP, code, false)
+	if err != nil {
+		http.Error(w, "login error", http.StatusInternalServerError)
 		return
 	}
-
-	res, _ := a.login.VerifyTOTP(userID, code)
-	if !res.Authenticated {
-		res, _ = a.login.VerifyRecoveryCode(userID, code)
+	if !res.OK {
+		res, err = a.flow.Submit(r, w, userID, loginflow.MethodRecovery, code, false)
+		if err != nil {
+			http.Error(w, "login error", http.StatusInternalServerError)
+			return
+		}
 	}
-	if !res.Authenticated {
+	if !res.Done {
+		// either the code is wrong or the pending attempt expired; the 2FA
+		// form lets the user retry, and an expired attempt sends them back
+		// through the password step
 		a.rnd.Render(w, r, "profile_2fa.tmpl.html", map[string]any{
 			"UserID": userID,
 			"Error":  "Invalid code, try again.",
 		})
 		return
 	}
-
-	_ = a.pending.ClearPendingLogin(r, w, userID)
-	if err := a.sessMgr.LoginUser(r, w, userID, false); err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
 	http.Redirect(w, r, "/profile/", http.StatusSeeOther)
 }
 
+// totpSetup generates a new TOTP secret, stores it disabled, and shows the enrolment QR code.
 func (a *profileApp) totpSetup(w http.ResponseWriter, r *http.Request) {
 	ud, err := cookieauth.CtxGetUserData(r)
 	if err != nil {
@@ -277,6 +297,7 @@ func (a *profileApp) totpSetup(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// totpConfirm validates the first TOTP code, enables 2FA, and issues one-time recovery codes.
 func (a *profileApp) totpConfirm(w http.ResponseWriter, r *http.Request) {
 	ud, err := cookieauth.CtxGetUserData(r)
 	if err != nil {
@@ -325,6 +346,7 @@ func (a *profileApp) totpConfirm(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// totpDisable turns off TOTP and clears the user's recovery codes.
 func (a *profileApp) totpDisable(w http.ResponseWriter, r *http.Request) {
 	ud, err := cookieauth.CtxGetUserData(r)
 	if err != nil {

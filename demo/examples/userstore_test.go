@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 
-	"github.com/go-bumbu/userauth/userstore/dbuser"
+	"github.com/go-bumbu/userauth/userstore/userdb"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -16,9 +16,7 @@ var seedAccounts = []struct{ id, pw string }{
 	{"demo@example.com", "demo"},
 }
 
-// SeededStore opens an in-memory SQLite DB, builds a dbuser.Store, seeds the
-// demo accounts, and returns the store. Shared by the demo binary and tests.
-func SeededStore() (*dbuser.Store, error) {
+func newUserStore() (*userdb.Store, error) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("open in-memory sqlite: %w", err)
@@ -27,7 +25,7 @@ func SeededStore() (*dbuser.Store, error) {
 	if _, err := rand.Read(totpKey); err != nil {
 		return nil, fmt.Errorf("generate TOTP encryption key: %w", err)
 	}
-	mgr, err := dbuser.New(db, dbuser.Opts{
+	mgr, err := userdb.New(db, userdb.Opts{
 		BcryptDifficulty:  4,
 		DefaultEnabled:    true,
 		TOTPEncryptionKey: totpKey,

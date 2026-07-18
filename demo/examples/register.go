@@ -9,17 +9,16 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/web"
-	"github.com/go-bumbu/userauth/userstore/dbuser"
+	"github.com/go-bumbu/userauth/userstore/userdb"
 	vcmemory "github.com/go-bumbu/userauth/verificationcode/memory"
 )
 
 // Register handles user self-registration (password-based and email-code-based).
 type Register struct {
 	log     *slog.Logger
-	users   *dbuser.Store
+	users   *userdb.Store
 	rnd     *web.Renderer
-	store   *vcmemory.Store
-	codeSvc *userauth.VerificationCodeService
+	codes   *userauth.VerificationCodeService
 	pending struct {
 		mu    sync.Mutex
 		items map[string]pendingEmailReg
@@ -33,9 +32,9 @@ type pendingEmailReg struct {
 }
 
 // NewRegister creates a Register and initialises its verification-code store.
-func NewRegister(log *slog.Logger, users *dbuser.Store, rnd *web.Renderer) *Register {
-	a := &Register{log: log, users: users, rnd: rnd, store: vcmemory.New()}
-	a.codeSvc = &userauth.VerificationCodeService{Store: a.store.Store, CodeLength: 6, Expiry: 10 * time.Minute}
+func NewRegister(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) *Register {
+	a := &Register{log: log, users: users, rnd: rnd}
+	a.codes = userauth.NewVerificationCodeService(vcmemory.New(), userauth.VerificationCodeOpts{CodeLength: 6, Expiry: 10 * time.Minute})
 	a.pending.items = make(map[string]pendingEmailReg)
 	return a
 }
@@ -106,7 +105,7 @@ func (a *Register) Email(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, expiresAt, err := a.codeSvc.Generate(email)
+	code, expiresAt, err := a.codes.Generate(email)
 	if err != nil {
 		a.rnd.Render(w, r, "register_email.tmpl.html", map[string]any{
 			"Error": "Could not generate verification code.",
@@ -147,7 +146,7 @@ func (a *Register) EmailVerify(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	ok, err := a.store.VerifyEmailCode(email, code)
+	ok, err := a.codes.Verify(email, code)
 	if err != nil || !ok {
 		renderErr("Invalid or expired verification code.")
 		return
@@ -165,7 +164,7 @@ func (a *Register) EmailVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.users.CreateUser(dbuser.User{
+	if err := a.users.CreateUser(userdb.User{
 		LoginID:              email,
 		Pw:                   pending.password,
 		Enabled:              true,

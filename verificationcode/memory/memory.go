@@ -3,8 +3,6 @@ package memory
 import (
 	"sync"
 	"time"
-
-	"github.com/go-bumbu/userauth/hashutil"
 )
 
 type codeEntry struct {
@@ -12,31 +10,28 @@ type codeEntry struct {
 	expiresAt time.Time
 }
 
-// Store is an in-memory verification code store. Safe for concurrent use.
-// Suitable for file-mode email 2FA where codes are transient.
+// Store is an in-memory CodeStore. Safe for concurrent use. One Store instance
+// backs one code channel (e.g. email or SMS).
 type Store struct {
 	mu    sync.Mutex
 	codes map[string]codeEntry
 }
 
 func New() *Store {
-	return &Store{
-		codes: make(map[string]codeEntry),
-	}
+	return &Store{codes: make(map[string]codeEntry)}
 }
 
-// Store saves a hashed code for the given user, replacing any previous code.
-// This signature matches the Store func field on userauth.VerificationCodeService.
-func (s *Store) Store(userID, hash string, expiresAt time.Time) error {
+// StoreCode saves the hash for userID, replacing any previous code.
+func (s *Store) StoreCode(userID, hash string, expiresAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.codes[userID] = codeEntry{hash: hash, expiresAt: expiresAt}
 	return nil
 }
 
-// VerifyEmailCode implements userauth.EmailCodeVerifier.
-// Returns true if the code matches and has not expired, then deletes the entry.
-func (s *Store) VerifyEmailCode(userID, code string) (bool, error) {
+// ConsumeCode atomically checks for a non-expired matching hash and deletes it
+// on success (one-time use). Returns false if absent, expired, or mismatched.
+func (s *Store) ConsumeCode(userID, hash string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -48,7 +43,7 @@ func (s *Store) VerifyEmailCode(userID, code string) (bool, error) {
 		delete(s.codes, userID)
 		return false, nil
 	}
-	if hashutil.HashCodeSHA256(code) != entry.hash {
+	if entry.hash != hash {
 		return false, nil
 	}
 	delete(s.codes, userID)
