@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Enter recovery code</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3>Enter a recovery code</h3>
+<p class="info" style="text-align:center;">Step 2 of 2: enter one of your single-use recovery codes.</p>
+
+{{if .Codes}}
+<div class="pseudo-email">
+    <p><strong>Pseudo code sheet</strong> — in production these were shown once at 2FA enrolment
+        and written down by the user.</p>
+    <p>Remaining codes: {{range .Codes}}<span class="email-code" style="font-size:1.2em;margin:0 6px;">{{.}}</span>{{end}}</p>
+    <p>Each code works exactly once.</p>
+</div>
+{{end}}
+
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+
+<form class="login-form" method="POST" action="/recovery/login/verify">
+    <input type="hidden" name="username" value="{{.Username}}">
+
+    <label for="code">Recovery code</label>
+    <input type="text" id="code" name="code" autocomplete="one-time-code"
+           placeholder="tqxm3k9d" required autofocus>
+
+    <button type="submit">Log in</button>
+</form>
+
+<p><a href="/recovery/login">← Start over</a></p>
+</body>
+</html>

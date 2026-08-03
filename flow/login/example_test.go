@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"time"
 
-	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/flow/login"
 	"github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
+	"github.com/go-bumbu/userauth/internal/hashutil"
 	"github.com/go-bumbu/userauth/service/verificationcode"
 	csmemory "github.com/go-bumbu/userauth/service/verificationcode/store/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
@@ -41,7 +41,7 @@ func (noopSession) LoginUser(_ *http.Request, _ http.ResponseWriter, userID stri
 // the session exactly once, when the policy is satisfied.
 func Example() {
 	users := &staticusers.Users{Users: []staticusers.User{
-		{Id: "bob", HashPw: userauth.MustHashPw("secret"), Enabled: true},
+		{Id: "bob", HashPw: hashutil.MustHashPassword("secret"), Enabled: true},
 	}}
 
 	flow := &login.Flow{
@@ -118,7 +118,7 @@ func Example_emailPlusTOTP() {
 // completes first.
 func Example_alternativeChains() {
 	users := &staticusers.Users{Users: []staticusers.User{
-		{Id: "bob", HashPw: userauth.MustHashPw("secret"), Enabled: true},
+		{Id: "bob", HashPw: hashutil.MustHashPassword("secret"), Enabled: true},
 	}}
 	codes := verificationcode.NewService(csmemory.New(), verificationcode.Opts{})
 	mail := &printDeliverer{}
@@ -158,8 +158,8 @@ func Example_alternativeChains() {
 func ExampleSecondFactorAfter() {
 	const totpSecret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
 	users := &staticusers.Users{Users: []staticusers.User{
-		{Id: "plain", HashPw: userauth.MustHashPw("secret"), Enabled: true},
-		{Id: "careful", HashPw: userauth.MustHashPw("secret"), Enabled: true, TOTPSecret: totpSecret},
+		{Id: "plain", HashPw: hashutil.MustHashPassword("secret"), Enabled: true},
+		{Id: "careful", HashPw: hashutil.MustHashPassword("secret"), Enabled: true, TOTPSecret: totpSecret},
 	}}
 
 	flow := &login.Flow{

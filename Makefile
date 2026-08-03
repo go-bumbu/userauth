@@ -50,9 +50,11 @@ cover-report: ## generate a coverage report
 
 
 
+DEMO_PORT ?= 8085
+
 .PHONY: demo
-run-demo: ## run the demo
-	go run ./demo/
+run-demo: ## run the demo (port: make run-demo DEMO_PORT=9000)
+	DEMO_PORT=$(DEMO_PORT) go run ./demo/
 
 #==========================================================================================
 ##@ Release

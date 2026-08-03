@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/auth/basicauth"
+	"github.com/go-bumbu/userauth/internal/hashutil"
 )
 
 type dummyUser struct {
@@ -20,7 +21,7 @@ func (st dummyUser) GetUser(id string) (userauth.User, error) {
 		st.user = "admin"
 	}
 	if st.pass == "" {
-		st.pass = userauth.MustHashPw("admin")
+		st.pass = hashutil.MustHashPassword("admin")
 	}
 	return userauth.User{
 		Id:      st.user,

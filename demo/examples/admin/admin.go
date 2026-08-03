@@ -1,4 +1,6 @@
-package examples
+// Package admin holds the demo example for admin user management on
+// userdb.Store: a paginated user list plus create and enable/disable actions.
+package admin
 
 import (
 	"log/slog"
@@ -27,8 +29,8 @@ type usersAdminApp struct {
 	rnd   *web.Renderer
 }
 
-// UsersAdmin returns an http.Handler (a mux.Router) that manages the user-admin UI.
-func UsersAdmin(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Handler {
+// New returns an http.Handler (a mux.Router) that manages the user-admin UI.
+func New(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Handler {
 	a := &usersAdminApp{log: log, users: users, rnd: rnd}
 	r := mux.NewRouter()
 	r.Path("/").Methods(http.MethodGet).HandlerFunc(a.list)

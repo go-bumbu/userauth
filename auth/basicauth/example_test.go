@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/auth/basicauth"
+	"github.com/go-bumbu/userauth/internal/hashutil"
 )
 
 func Example_basicauth_Middleware() {
@@ -15,7 +15,7 @@ func Example_basicauth_Middleware() {
 	// create a user store; basicauth fetches and verifies user credentials from it
 	users := dummyUser{
 		user: "demo",
-		pass: userauth.MustHashPw("demo"),
+		pass: hashutil.MustHashPassword("demo"),
 	}
 	// create an instance of basic auth
 	basicAuth := basicauth.NewHandler(users, "", true, nil)

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/flow/login"
 	"github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
 	"github.com/go-bumbu/userauth/flow/login/handlers"
+	"github.com/go-bumbu/userauth/internal/hashutil"
 	"github.com/go-bumbu/userauth/service/verificationcode"
 	csmemory "github.com/go-bumbu/userauth/service/verificationcode/store/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
@@ -79,9 +79,9 @@ func totpCode(t *testing.T) string {
 
 func passwordTOTPFixture() (*handlers.JSON, *captureLogin) {
 	users := &staticusers.Users{Users: []staticusers.User{
-		{Id: "plain", HashPw: userauth.MustHashPw("plain-pw"), Enabled: true},
-		{Id: "careful", HashPw: userauth.MustHashPw("careful-pw"), Enabled: true, TOTPSecret: totpSecret},
-		{Id: "gone", HashPw: userauth.MustHashPw("gone-pw"), Enabled: false},
+		{Id: "plain", HashPw: hashutil.MustHashPassword("plain-pw"), Enabled: true},
+		{Id: "careful", HashPw: hashutil.MustHashPassword("careful-pw"), Enabled: true, TOTPSecret: totpSecret},
+		{Id: "gone", HashPw: hashutil.MustHashPassword("gone-pw"), Enabled: false},
 	}}
 	session := &captureLogin{}
 	j := handlers.NewPasswordTOTP(handlers.PasswordTOTPCfg{
@@ -218,7 +218,7 @@ func TestPasswordTOTPLogin(t *testing.T) {
 
 	t.Run("recovery code stands in for totp when configured", func(t *testing.T) {
 		users := &staticusers.Users{Users: []staticusers.User{
-			{Id: "careful", HashPw: userauth.MustHashPw("pw"), Enabled: true, TOTPSecret: totpSecret},
+			{Id: "careful", HashPw: hashutil.MustHashPassword("pw"), Enabled: true, TOTPSecret: totpSecret},
 		}}
 		session := &captureLogin{}
 		j := handlers.NewPasswordTOTP(handlers.PasswordTOTPCfg{

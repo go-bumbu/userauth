@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/flow/login"
 	"github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
+	"github.com/go-bumbu/userauth/internal/hashutil"
 	"github.com/go-bumbu/userauth/service/verificationcode"
 	csmemory "github.com/go-bumbu/userauth/service/verificationcode/store/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
@@ -54,9 +54,9 @@ type fixture struct {
 // twin "carol"). The policy is supplied by the test.
 func newFixture(policy login.Policy) *fixture {
 	users := &staticusers.Users{Users: []staticusers.User{
-		{Id: "alice", HashPw: userauth.MustHashPw("alice-pw"), Enabled: true, TOTPSecret: totpSecret},
-		{Id: "bob", HashPw: userauth.MustHashPw("bob-pw"), Enabled: true},
-		{Id: "carol", HashPw: userauth.MustHashPw("carol-pw"), Enabled: false},
+		{Id: "alice", HashPw: hashutil.MustHashPassword("alice-pw"), Enabled: true, TOTPSecret: totpSecret},
+		{Id: "bob", HashPw: hashutil.MustHashPassword("bob-pw"), Enabled: true},
+		{Id: "carol", HashPw: hashutil.MustHashPassword("carol-pw"), Enabled: false},
 	}}
 	codes := verificationcode.NewService(csmemory.New(), verificationcode.Opts{})
 	deliverer := &captureDeliverer{}

@@ -1,49 +1,49 @@
 # Demo TODO
 
-## 2FA / Multi-step login
-- [ ] JSON login endpoints (`loginflow/handlers` — `JSON.LoginHandler`/`VerifyHandler`/`RequestCodeHandler`)
-- [x] Login attempt state management (`loginflow.AttemptStore`, bridges factor submissions)
-- [x] TOTP verification step (`loginflow.TOTPMethod`)
-- [ ] Email 2FA verification step (`loginflow.CodeMethod` as second factor)
-- [ ] SMS 2FA verification step (`loginflow.CodeMethod` with an SMS deliverer)
-- [x] Recovery code verification step (`loginflow.RecoveryMethod`)
+Feature-coverage gaps between the library and the demo, grouped by package.
 
-## User management
-- [ ] User registration (`UserRegistrar` / `dbusers.DbManager.Create`)
-- [ ] Enable/disable a user account (`UserUpdater.SetEnabled`)
-- [ ] Set/update primary email (`UserUpdater.SetPrimaryEmail`, `.SetPrimaryEmailVerified`)
-- [ ] Password hash update (`dbusers.DbManager.SetPasswordHash`)
+## Login (`flow/login`)
+- [x] Password form login
+- [x] Passwordless email-code login (`login.CodeMethod` / `EmailCodeMethod`)
+- [x] TOTP verification step (`login.TOTPMethod`)
+- [x] Recovery code verification step (`login.RecoveryMethod`)
+- [x] JSON login endpoints (`flow/login/handlers` — `NewPasswordTOTP` preset)
+- [ ] JSON email-code login (`flow/login/handlers.NewEmailCode` preset)
+- [ ] Email code as a *second* factor (`login.CodeMethod` after password)
+- [ ] SMS 2FA verification step (`login.CodeMethod` with an SMS deliverer)
 
-## TOTP setup flow
-- [x] Configure TOTP for a user (`TOTPConfigurator.SetTOTP`)
-- [x] Show TOTP QR/secret provisioning
-- [x] AES-256-GCM encryption of TOTP secret at rest (`hashutil.Encrypt/Decrypt`)
+## Login attempt stores (`flow/login/attemptstore`)
+- [x] In-memory (`attemptstore/memory`) — current process, no persistence
+- [ ] Cookie-based (`attemptstore/cookie`) — survives process restart
+- [ ] DB-backed (`attemptstore/db`) — multi-instance safe
 
-## Recovery codes
-- [x] Generate and store recovery codes (`hashutil.GenerateRecoveryCodes`, `RecoveryCodeConfigurator.SetRecoveryCodes`)
-- [x] Show remaining recovery code count (`RecoveryCodeCountGetter`)
+## Registration (`flow/register`)
+- [x] Username+password registration
+- [x] Email-verified registration (pending store + verification code)
+- [x] JSON registration API (`flow/register/handlers` preset)
+- [ ] Invite-based registration (`flow/register/invite`)
+- [ ] Non-memory pending stores (`pendingstore/cookie`, `pendingstore/db`)
 
-## Verification code delivery
-- [ ] `VerificationCodeService` — generate and hash a one-time code
-- [ ] File deliverer (`delivery/file`) — write code to disk (useful for dev/test)
-- [ ] SMTP deliverer (`delivery/smtp`) — send code via email
+## Profile / user self-service (`userstore/userdb`)
+- [x] Password change, email change
+- [x] TOTP enrolment with QR provisioning (`Store.SetTOTP`)
+- [x] Recovery code issuance and remaining count
+- [ ] Email change with verification (`Store.StorePendingEmailChange` / `VerifyPendingEmailChange`)
 
-## Email change verification
-- [ ] Initiate email change (`dbusers.StorePendingEmailChange`)
-- [ ] Verify and confirm email change (`dbusers.VerifyPendingEmailChange`)
+## Admin (`userstore/userdb`)
+- [x] Paginated user list (`Store.List`)
+- [x] Create user, enable/disable (`Store.Create`, `Store.SetEnabled`)
+- [ ] Set / verify primary email (`Store.SetPrimaryEmail`, `SetPrimaryEmailVerified`)
+- [ ] Password reset by admin (`Store.SetPasswordHash`)
 
-## Database-backed user store
-- [ ] `dbusers.DbManager` as a drop-in replacement for `staticusers`
-- [ ] `dbusers.ManagerOpts` (bcrypt cost, default-enabled, username format, TOTP encryption key)
+## Verification code delivery (`service/verificationcode/deliver`)
+- [ ] File deliverer (`deliver/file`) — write code to disk (useful for dev/test)
+- [ ] SMTP deliverer (`deliver/smtp`) — send code via email
 
-## Login attempt stores
-- [x] In-memory (`loginflow/attemptstore/memory`) — current session, no persistence
-- [ ] Cookie-based (`loginflow/attemptstore/cookie`) — survives process restart
-- [ ] DB-backed (`loginflow/attemptstore/db`) — multi-instance safe
-
-## Auth chain
-- [ ] `chain.Authenticator` — chain multiple auth handlers with authorized/unauthorized callbacks
+## Auth chain (`auth/chain`)
+- [x] `chain.Authenticator` — cookie session first, basic auth fallback,
+      unauthorized callback redirecting to login
 
 ## Misc
+- [ ] `staticusers.FromFile` — load static users from YAML/JSON
 - [ ] `ValidateLoginID` with different `UsernameFormat` policies (any / email-only / plain)
-- [ ] `cookieauth.CtxGetUserData` / `CtxSetUserData` — reading user identity downstream in a handler

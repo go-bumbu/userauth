@@ -205,10 +205,6 @@ p.error {
 }
 
 /* Tabs */
-.tabs input[type="radio"] {
-    display: none;
-}
-
 .tab-labels {
     display: flex;
     max-width: 900px;
@@ -216,7 +212,7 @@ p.error {
     border-bottom: 2px solid #0056b3;
 }
 
-.tab-labels label {
+.tab-label {
     padding: 10px 24px;
     cursor: pointer;
     background: #f0f0f0;
@@ -226,15 +222,16 @@ p.error {
     border-radius: 4px 4px 0 0;
     color: #555;
     font-weight: bold;
+    font-size: 1em;
+    font-family: inherit;
 }
 
-.tab-labels label:hover {
+.tab-label:hover {
     background: #e0e8f5;
     color: #0056b3;
 }
 
-#tab-auth:checked ~ .tab-labels label[for="tab-auth"],
-#tab-users:checked ~ .tab-labels label[for="tab-users"] {
+.tab-label.active {
     background: #0056b3;
     color: white;
     border-color: #0056b3;
@@ -244,7 +241,6 @@ p.error {
     display: none;
 }
 
-#tab-auth:checked ~ .auth-content,
-#tab-users:checked ~ .users-content {
+.tab-content.active {
     display: block;
 }

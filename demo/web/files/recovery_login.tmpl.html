@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Recovery Code Login</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3>Recovery-code login</h3>
+<p class="info" style="text-align:center;">
+    Step 1 of 2: enter your password. The second factor is completed with a
+    single-use recovery code — the "lost my authenticator" path.
+</p>
+
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+
+<form class="login-form" method="POST" action="/recovery/login">
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" autocomplete="username" required>
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required>
+
+    <button type="submit">Continue</button>
+</form>
+
+<p class="info">Demo account: <code>demo:demo</code></p>
+
+<p><a href="/">← Back</a></p>
+</body>
+</html>

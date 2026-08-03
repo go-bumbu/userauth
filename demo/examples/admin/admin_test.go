@@ -1,4 +1,4 @@
-package examples
+package admin
 
 import (
 	"net/http"
@@ -6,14 +6,16 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/go-bumbu/userauth/demo/internal/demotest"
 )
 
 func TestUserMgmtList(t *testing.T) {
-	users, err := newUserStore()
+	users, err := demotest.NewUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := UsersAdmin(testLogger(), users, testWeb())
+	handler := New(demotest.Logger(), users, demotest.Web())
 
 	// page 1: first two login IDs (admin, admin@example.com), a Next link, no Prev
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -47,11 +49,11 @@ func TestUserMgmtList(t *testing.T) {
 }
 
 func TestUserMgmtCreate(t *testing.T) {
-	users, err := newUserStore()
+	users, err := demotest.NewUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := UsersAdmin(testLogger(), users, testWeb())
+	handler := New(demotest.Logger(), users, demotest.Web())
 	form := url.Values{"login": {"uniquecreatetest"}, "password": {"secret"}}
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -66,11 +68,11 @@ func TestUserMgmtCreate(t *testing.T) {
 }
 
 func TestUserMgmtCreateDuplicate(t *testing.T) {
-	users, err := newUserStore()
+	users, err := demotest.NewUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := UsersAdmin(testLogger(), users, testWeb())
+	handler := New(demotest.Logger(), users, demotest.Web())
 	form := url.Values{"login": {"admin"}, "password": {"admin"}}
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -85,11 +87,11 @@ func TestUserMgmtCreateDuplicate(t *testing.T) {
 }
 
 func TestUserMgmtDisable(t *testing.T) {
-	users, err := newUserStore()
+	users, err := demotest.NewUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := UsersAdmin(testLogger(), users, testWeb())
+	handler := New(demotest.Logger(), users, demotest.Web())
 	req := httptest.NewRequest(http.MethodPost, "/demo/disable", nil)
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -102,11 +104,11 @@ func TestUserMgmtDisable(t *testing.T) {
 }
 
 func TestUserMgmtEnable(t *testing.T) {
-	users, err := newUserStore()
+	users, err := demotest.NewUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := UsersAdmin(testLogger(), users, testWeb())
+	handler := New(demotest.Logger(), users, demotest.Web())
 	req := httptest.NewRequest(http.MethodPost, "/demo/enable", nil)
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)

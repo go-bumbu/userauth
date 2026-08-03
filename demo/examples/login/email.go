@@ -1,16 +1,15 @@
 package login
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-bumbu/userauth/auth/cookieauth"
+	"github.com/go-bumbu/userauth/demo/internal/deliver"
 	"github.com/go-bumbu/userauth/demo/web"
 	loginflow "github.com/go-bumbu/userauth/flow/login"
 	flowmemory "github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
@@ -33,7 +32,7 @@ type emailLoginApp struct {
 	rnd   *web.Renderer
 	users staticusers.Users
 	flow  *loginflow.Flow
-	board *demoCodeBoard
+	board *deliver.Board
 }
 
 // Email demonstrates passwordless email-code login persisted in a cookie
@@ -71,7 +70,7 @@ func Email(log *slog.Logger, rnd *web.Renderer) http.Handler {
 	app := &emailLoginApp{
 		rnd:   rnd,
 		users: users,
-		board: newDemoCodeBoard(),
+		board: deliver.NewBoard(),
 	}
 	app.flow = &loginflow.Flow{
 		Users: &app.users,
@@ -144,7 +143,7 @@ func (a *emailLoginApp) verifyCode(w http.ResponseWriter, r *http.Request) {
 		a.renderVerify(w, r, email, "Invalid or expired login code.")
 		return
 	}
-	a.board.clear(email)
+	a.board.Clear(email)
 	http.Redirect(w, r, basePath+"/protected", http.StatusSeeOther)
 }
 
@@ -173,7 +172,7 @@ func (a *emailLoginApp) renderLogin(w http.ResponseWriter, r *http.Request, emai
 // (the demo cannot actually email it) plus an optional error.
 func (a *emailLoginApp) renderVerify(w http.ResponseWriter, r *http.Request, email, errMsg string) {
 	data := map[string]any{"Email": email}
-	if code, ok := a.board.lookup(email); ok {
+	if code, ok := a.board.Lookup(email); ok {
 		data["PlainCode"] = code
 	}
 	if errMsg != "" {
@@ -189,38 +188,4 @@ func (a *emailLoginApp) addresses() []string {
 		addrs = append(addrs, u.Id)
 	}
 	return addrs
-}
-
-// demoCodeBoard is the demo's verificationcode.Deliverer: instead of emailing the code
-// it remembers the latest plaintext code per email so the verify page can
-// display it. The verification store only keeps a hash, so this is the only
-// place the plaintext survives.
-type demoCodeBoard struct {
-	mu    sync.Mutex
-	codes map[string]string
-}
-
-func newDemoCodeBoard() *demoCodeBoard {
-	return &demoCodeBoard{codes: make(map[string]string)}
-}
-
-// Deliver implements verificationcode.Deliverer by stashing the code for display.
-func (b *demoCodeBoard) Deliver(_ context.Context, to string, code string, _ time.Time) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.codes[to] = code
-	return nil
-}
-
-func (b *demoCodeBoard) lookup(email string) (string, bool) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	code, ok := b.codes[email]
-	return code, ok
-}
-
-func (b *demoCodeBoard) clear(email string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	delete(b.codes, email)
 }

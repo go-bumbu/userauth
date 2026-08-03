@@ -1,4 +1,4 @@
-package examples
+package profile
 
 import (
 	"net/http"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-bumbu/userauth/demo/internal/demotest"
 	"github.com/go-bumbu/userauth/userstore/userdb"
 	"github.com/pquerna/otp/totp"
 )
@@ -20,12 +21,12 @@ func enrollTOTP(t *testing.T, handler http.Handler, users *userdb.Store, uid str
 	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	lw := postForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
+	lw := demotest.PostForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
 	cookies := lw.Result().Cookies()
 	if len(cookies) == 0 {
 		t.Fatalf("expected session cookie after one-step login")
 	}
-	sw := postForm(handler, "/totp/setup", url.Values{}, cookies)
+	sw := demotest.PostForm(handler, "/totp/setup", url.Values{}, cookies)
 	if sw.Code != http.StatusOK {
 		t.Fatalf("setup: want 200, got %d", sw.Code)
 	}
@@ -38,7 +39,7 @@ func enrollTOTP(t *testing.T, handler http.Handler, users *userdb.Store, uid str
 	if err != nil {
 		t.Fatalf("generate code: %v", err)
 	}
-	cw := postForm(handler, "/totp/confirm", url.Values{"code": {code}}, cookies)
+	cw := demotest.PostForm(handler, "/totp/confirm", url.Values{"code": {code}}, cookies)
 	if cw.Code != http.StatusOK {
 		t.Fatalf("confirm: want 200, got %d", cw.Code)
 	}
@@ -46,11 +47,11 @@ func enrollTOTP(t *testing.T, handler http.Handler, users *userdb.Store, uid str
 }
 
 func TestProfileTOTPEnroll(t *testing.T) {
-	users, err := newUserStore()
+	users, err := demotest.NewUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := Profile(testLogger(), users, testWeb())
+	handler := New(demotest.Logger(), users, demotest.Web())
 	uid := "enroll@example.com"
 	enrollTOTP(t, handler, users, uid)
 
@@ -64,15 +65,15 @@ func TestProfileTOTPEnroll(t *testing.T) {
 }
 
 func TestProfileTOTPDisable(t *testing.T) {
-	users, err := newUserStore()
+	users, err := demotest.NewUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := Profile(testLogger(), users, testWeb())
+	handler := New(demotest.Logger(), users, demotest.Web())
 	uid := "disable@example.com"
 	cookies, _ := enrollTOTP(t, handler, users, uid)
 
-	w := postForm(handler, "/totp/disable", url.Values{}, cookies)
+	w := demotest.PostForm(handler, "/totp/disable", url.Values{}, cookies)
 	if w.Code != http.StatusOK && w.Code != http.StatusSeeOther {
 		t.Fatalf("disable: want 200 or 303, got %d", w.Code)
 	}
@@ -88,21 +89,21 @@ func TestProfileTOTPDisable(t *testing.T) {
 var recoveryCodeRe = regexp.MustCompile(`recovery-code">([^<]+)<`)
 
 func TestProfileTOTPRecoveryCodesShown(t *testing.T) {
-	users, err := newUserStore()
+	users, err := demotest.NewUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := Profile(testLogger(), users, testWeb())
+	handler := New(demotest.Logger(), users, demotest.Web())
 	uid := "reccodes@example.com"
 	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	lw := postForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
+	lw := demotest.PostForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
 	cookies := lw.Result().Cookies()
-	sw := postForm(handler, "/totp/setup", url.Values{}, cookies)
+	sw := demotest.PostForm(handler, "/totp/setup", url.Values{}, cookies)
 	secret := totpSecretRe.FindStringSubmatch(sw.Body.String())[1]
 	code, _ := totp.GenerateCode(secret, time.Now())
-	cw := postForm(handler, "/totp/confirm", url.Values{"code": {code}}, cookies)
+	cw := demotest.PostForm(handler, "/totp/confirm", url.Values{"code": {code}}, cookies)
 
 	matches := recoveryCodeRe.FindAllStringSubmatch(cw.Body.String(), -1)
 	if len(matches) != 6 {
@@ -118,27 +119,27 @@ func TestProfileTOTPRecoveryCodesShown(t *testing.T) {
 }
 
 func TestProfileRecoveryCodeLogin(t *testing.T) {
-	users, err := newUserStore()
+	users, err := demotest.NewUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := Profile(testLogger(), users, testWeb())
+	handler := New(demotest.Logger(), users, demotest.Web())
 	uid := "reclogin@example.com"
 	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	lw := postForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
+	lw := demotest.PostForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
 	cookies := lw.Result().Cookies()
-	sw := postForm(handler, "/totp/setup", url.Values{}, cookies)
+	sw := demotest.PostForm(handler, "/totp/setup", url.Values{}, cookies)
 	secret := totpSecretRe.FindStringSubmatch(sw.Body.String())[1]
 	code, _ := totp.GenerateCode(secret, time.Now())
-	cw := postForm(handler, "/totp/confirm", url.Values{"code": {code}}, cookies)
+	cw := demotest.PostForm(handler, "/totp/confirm", url.Values{"code": {code}}, cookies)
 	recCode := recoveryCodeRe.FindAllStringSubmatch(cw.Body.String(), -1)[0][1]
 
 	// password step establishes the pending login
-	_ = postForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
+	_ = demotest.PostForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
 	// log in with the recovery code
-	w := postForm(handler, "/login/2fa", url.Values{"userID": {uid}, "code": {recCode}}, nil)
+	w := demotest.PostForm(handler, "/login/2fa", url.Values{"userID": {uid}, "code": {recCode}}, nil)
 	if w.Code != http.StatusSeeOther {
 		t.Fatalf("recovery login: want 303, got %d", w.Code)
 	}
@@ -151,22 +152,22 @@ func TestProfileRecoveryCodeLogin(t *testing.T) {
 	}
 
 	// reusing the same code must fail
-	_ = postForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
-	w = postForm(handler, "/login/2fa", url.Values{"userID": {uid}, "code": {recCode}}, nil)
+	_ = demotest.PostForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
+	w = demotest.PostForm(handler, "/login/2fa", url.Values{"userID": {uid}, "code": {recCode}}, nil)
 	if len(w.Result().Cookies()) != 0 {
 		t.Error("reused recovery code must not authenticate")
 	}
 }
 
 func TestProfileTOTPDisableClearsRecoveryCodes(t *testing.T) {
-	users, err := newUserStore()
+	users, err := demotest.NewUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := Profile(testLogger(), users, testWeb())
+	handler := New(demotest.Logger(), users, demotest.Web())
 	uid := "discodes@example.com"
 	cookies, _ := enrollTOTP(t, handler, users, uid)
-	_ = postForm(handler, "/totp/disable", url.Values{}, cookies)
+	_ = demotest.PostForm(handler, "/totp/disable", url.Values{}, cookies)
 
 	count, err := users.GetRecoveryCodesCount(uid)
 	if err != nil {

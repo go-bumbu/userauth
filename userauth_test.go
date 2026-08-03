@@ -1,6 +1,7 @@
 package userauth
 
 import (
+	"github.com/go-bumbu/userauth/internal/hashutil"
 	"github.com/google/go-cmp/cmp"
 	"testing"
 )
@@ -20,7 +21,7 @@ func TestCheckHash(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 
-			got, err := CheckPass(tc.in, tc.hash)
+			got, err := hashutil.VerifyPassword(tc.in, tc.hash)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -47,7 +48,7 @@ func TestCheckHashErrs(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := CheckPass(tc.in, tc.hash)
+			_, err := hashutil.VerifyPassword(tc.in, tc.hash)
 
 			if diff := cmp.Diff(err.Error(), tc.err); diff != "" {
 				t.Errorf("unexpected error: \n%s", diff)

@@ -1,7 +1,7 @@
 // Package login holds the demo examples for login flows: handlers that
 // verify credentials and establish a session (password form, passwordless
-// email code), as opposed to authentication methods that authenticate each
-// request.
+// email code, password+TOTP, recovery code), as opposed to authentication
+// methods that authenticate each request.
 package login
 
 import (

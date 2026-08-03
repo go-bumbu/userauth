@@ -9,11 +9,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/router"
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 	"github.com/go-bumbu/userauth/userstore/userdb"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -27,8 +27,8 @@ func main() {
 	}
 
 	staticUsers := &staticusers.Users{Users: []staticusers.User{
-		{Id: "admin", HashPw: userauth.MustHashPw("admin"), Enabled: true},
-		{Id: "demo", HashPw: userauth.MustHashPw("demo"), Enabled: true},
+		{Id: "admin", HashPw: mustHashPw("admin"), Enabled: true},
+		{Id: "demo", HashPw: mustHashPw("demo"), Enabled: true},
 	}}
 
 	handler := router.New(router.Cfg{
@@ -38,9 +38,13 @@ func main() {
 		Web:         web.New(),
 	})
 
-	srv := &http.Server{Addr: ":8084", Handler: handler} // #nosec G112 -- demo server
+	port := os.Getenv("DEMO_PORT")
+	if port == "" {
+		port = "8085"
+	}
+	srv := &http.Server{Addr: ":" + port, Handler: handler} // #nosec G112 -- demo server
 	go func() {
-		logger.Info("Server is running on port http://localhost:8084")
+		logger.Info("Server is running on http://localhost:" + port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			panic(err)
 		}
@@ -51,6 +55,15 @@ func main() {
 	<-signalChan
 	logger.Info("Signal received, shutting down...")
 	_ = srv.Close()
+}
+
+// mustHashPw bcrypt-hashes a demo password; the static store holds hashes only.
+func mustHashPw(pw string) string {
+	h, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.MinCost)
+	if err != nil {
+		panic(err)
+	}
+	return string(h)
 }
 
 var demoSeedAccounts = []struct{ id, pw string }{

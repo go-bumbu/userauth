@@ -6,8 +6,6 @@ import (
 	"net/mail"
 	"strconv"
 	"strings"
-
-	"github.com/go-bumbu/userauth/internal/hashutil"
 )
 
 // UsernameFormat is the policy for allowed login identifier format (e.g. email-only or plain).
@@ -146,13 +144,3 @@ var ErrUserNotFound = errors.New("user not found")
 
 // ErrUserDisabled is thrown when a user is not enabled
 var ErrUserDisabled = errors.New("user is not enabled")
-
-// CheckPass compares a plain password with a stored hash. Returns true if they match.
-func CheckPass(plainPass, hash string) (bool, error) {
-	return hashutil.VerifyPassword(plainPass, hash)
-}
-
-// MustHashPw returns a bcrypt hash of the password; panics on error.
-func MustHashPw(pw string) string {
-	return hashutil.MustHashPassword(pw)
-}
