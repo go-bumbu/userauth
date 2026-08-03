@@ -2,8 +2,10 @@ package userdb
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/internal/hashutil"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -13,6 +15,7 @@ type User struct {
 	Name                 string `yaml:"name"`
 	LoginID              string `yaml:"login_id"` // unique login identifier (required)
 	Pw                   string `yaml:"pw"`
+	PwIsHashed           bool   `yaml:"pw_is_hashed"` // when true, Pw is a bcrypt hash and is stored as-is
 	Enabled              bool   `yaml:"enabled"`
 	PrimaryEmail         string `yaml:"primary_email"`
 	PrimaryEmailVerified bool   `yaml:"primary_email_verified"`
@@ -32,7 +35,14 @@ func (s Store) Create(id string, pw string) error {
 	return s.CreateUser(usr)
 }
 
+// CreateUser creates a user. When usr.PwIsHashed is true, Pw must be a valid
+// bcrypt hash and is stored as-is; otherwise Pw is hashed before storing.
 func (s Store) CreateUser(usr User) error {
+	return s.createUser(s.db, usr)
+}
+
+// createUser is the shared create path; db may be the store handle or a transaction.
+func (s Store) createUser(db *gorm.DB, usr User) error {
 	if usr.LoginID == "" {
 		return errors.New("login ID cannot be empty")
 	}
@@ -40,15 +50,23 @@ func (s Store) CreateUser(usr User) error {
 		return errors.New("password cannot be empty")
 	}
 
-	hashedPasswd, err := bcrypt.GenerateFromPassword([]byte(usr.Pw), s.bcryptDifficulty)
-	if err != nil {
-		return err
+	pw := usr.Pw
+	if usr.PwIsHashed {
+		if hashutil.Alg(usr.Pw) == hashutil.Unknown {
+			return fmt.Errorf("password for user %q is flagged as hashed but is not a recognized bcrypt hash", usr.LoginID)
+		}
+	} else {
+		hashedPasswd, err := bcrypt.GenerateFromPassword([]byte(usr.Pw), s.bcryptDifficulty)
+		if err != nil {
+			return err
+		}
+		pw = string(hashedPasswd)
 	}
 
 	usrModel := userModel{
 		Name:                 usr.Name,
 		LoginID:              usr.LoginID,
-		Pw:                   string(hashedPasswd),
+		Pw:                   pw,
 		Enabled:              usr.Enabled,
 		PrimaryEmail:         usr.PrimaryEmail,
 		PrimaryEmailVerified: usr.PrimaryEmailVerified,
@@ -56,32 +74,15 @@ func (s Store) CreateUser(usr User) error {
 		BackupEmailVerified:  usr.BackupEmailVerified,
 	}
 
-	return s.db.Create(&usrModel).Error
+	return db.Create(&usrModel).Error
 }
 
 // CreateUserWithHashedPassword creates a user with a pre-hashed password.
 // Unlike CreateUser, this does not hash the password - it stores it directly.
-// Use this when provisioning users with passwords that are already bcrypt hashed.
+// The password must be a valid bcrypt hash.
 func (s Store) CreateUserWithHashedPassword(usr User) error {
-	if usr.LoginID == "" {
-		return errors.New("login ID cannot be empty")
-	}
-	if usr.Pw == "" {
-		return errors.New("password cannot be empty")
-	}
-
-	usrModel := userModel{
-		Name:                 usr.Name,
-		LoginID:              usr.LoginID,
-		Pw:                   usr.Pw,
-		Enabled:              usr.Enabled,
-		PrimaryEmail:         usr.PrimaryEmail,
-		PrimaryEmailVerified: usr.PrimaryEmailVerified,
-		BackupEmail:          usr.BackupEmail,
-		BackupEmailVerified:  usr.BackupEmailVerified,
-	}
-
-	return s.db.Create(&usrModel).Error
+	usr.PwIsHashed = true
+	return s.createUser(s.db, usr)
 }
 
 // toUser maps the stored row to the public userauth.User.
@@ -108,6 +109,45 @@ func (s Store) GetUser(id string) (userauth.User, error) {
 		return userauth.User{}, err
 	}
 	return m.toUser(), nil
+}
+
+// Count returns the total number of users in the store.
+func (s Store) Count() (int64, error) {
+	var total int64
+	err := s.db.Model(&userModel{}).Count(&total).Error
+	return total, err
+}
+
+// IsEmpty reports whether the store contains no users. Useful to decide
+// whether an initial admin bootstrap or a first-run setup flow is needed.
+func (s Store) IsEmpty() (bool, error) {
+	total, err := s.Count()
+	return total == 0, err
+}
+
+// Delete permanently removes a user and all associated data (TOTP config,
+// recovery codes, verification codes, second-factor flags, pending email
+// changes). The row is hard-deleted so the login ID can be reused.
+// Returns userauth.ErrUserNotFound if the user does not exist.
+func (s Store) Delete(userID string) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Unscoped().Where("login_id = ?", userID).Delete(&userModel{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return userauth.ErrUserNotFound
+		}
+		for _, m := range []interface{}{
+			&totpModel{}, &recoveryCodeModel{}, &emailVerificationCodeModel{},
+			&smsVerificationCodeModel{}, &secondFactorFlagsModel{}, &pendingEmailChangeModel{},
+		} {
+			if err := tx.Unscoped().Where("user_id = ?", userID).Delete(m).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 const (

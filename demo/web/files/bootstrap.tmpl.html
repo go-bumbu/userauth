@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Bootstrap Demo</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3><a href="/?tab=admin">← Back</a></h3>
+<h4>Initial Admin Bootstrap (in-memory SQLite)</h4>
+
+<p>
+    This store was seeded at startup via <code>Store.Bootstrap</code>, which only
+    creates the initial admin (<code>admin</code>/<code>admin</code>) while the
+    store is completely empty. Try the chicken-and-egg scenario: create a second
+    admin, delete the original one, then re-run bootstrap — the deleted account
+    is not resurrected. Only after deleting <em>all</em> users does bootstrap
+    seed again.
+</p>
+
+{{if .Msg}}<p class="error">{{.Msg}}</p>{{end}}
+
+<table class="user-table">
+    <thead>
+        <tr>
+            <th>Login ID</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {{range .Users}}
+        <tr>
+            <td>{{.ID}}</td>
+            <td>{{if .Enabled}}enabled{{else}}disabled{{end}}</td>
+            <td>
+                <form method="POST" action="/bootstrap/{{.ID}}/delete" style="display:inline">
+                    <button type="submit">Delete</button>
+                </form>
+            </td>
+        </tr>
+    {{else}}
+        <tr><td colspan="3">The store is empty — run bootstrap to seed the initial admin.</td></tr>
+    {{end}}
+    </tbody>
+</table>
+
+<h4>Run startup bootstrap</h4>
+<p>The same <code>Store.Bootstrap</code> call an application makes on every startup.</p>
+<form method="POST" action="/bootstrap/run">
+    <button type="submit">Run bootstrap</button>
+</form>
+
+<h4>Create User</h4>
+<form method="POST" action="/bootstrap/" class="login-form">
+    <label for="login">Login ID</label>
+    <input id="login" type="text" name="login" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" name="password" required>
+    <button type="submit">Create User</button>
+</form>
+
+<h4>Setup status (for SPAs)</h4>
+<p>
+    <a href="/bootstrap/status">/bootstrap/status</a> returns
+    <code>{"needsSetup": true}</code> while the store is empty — the check an SPA
+    uses to decide whether to show its first-run setup wizard.
+</p>
+</body>
+</html>

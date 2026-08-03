@@ -27,6 +27,9 @@ each file can be copied into a real application as a starting point.
   - Password and email change
 - `examples/admin` — admin user management on `userstore/userdb`
   - Paginated user list, create, enable/disable
+  - Initial admin bootstrap (`Store.Bootstrap`): seeds the first admin only
+    while the store is empty, plus a `needsSetup` JSON endpoint for SPA
+    first-run setup flows
 
 Demo-only plumbing lives in `demo/internal`: `deliver` fakes code delivery
 (display board / server log) and `demotest` holds shared test helpers.
