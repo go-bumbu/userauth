@@ -12,10 +12,9 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/auth/cookieauth"
-	logincookie "github.com/go-bumbu/userauth/handlers/login"
-	"github.com/go-bumbu/userauth/loginflow"
+	"github.com/go-bumbu/userauth/demo/web"
+	loginflow "github.com/go-bumbu/userauth/flow/login"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 )
@@ -75,7 +74,7 @@ func Password(log *slog.Logger, users userauth.UserGetter, rnd *web.Renderer) ht
 		}
 		http.Redirect(w, req, "/password/protected", http.StatusSeeOther)
 	})
-	r.Path("/logout").Handler(logincookie.LogoutHandler(sessMgr, "/"))
+	r.Path("/logout").Handler(cookieauth.LogoutHandler(sessMgr, "/"))
 
 	return r
 }

@@ -12,15 +12,15 @@ check here and in TODO.md — several gaps are known and have a chosen direction
 | Header auth | Implemented | `headerauth` — trusts upstream header (default `X-User-Auth`), no verification; for reverse proxies like Authelia |
 | Auth chain | Implemented | `chain.Authenticator` — in-order evaluation, first success wins, `stopEvaluation` short-circuits |
 
-## Login (`loginflow/`, see [loginflow.md](loginflow.md))
+## Login (`flow/login/`, see [loginflow.md](loginflow.md))
 
 | Feature | Status | Where |
 |---|---|---|
-| Multi-factor login engine | Implemented | `loginflow.Flow` — policies, methods, attempt stores |
-| JSON API login | Implemented | `loginflow/handlers.JSON` — login/verify/request-code; presets `NewPasswordTOTP`, `NewEmailCode` |
+| Multi-factor login engine | Implemented | `login.Flow` — policies, methods, attempt stores |
+| JSON API login | Implemented | `flow/login/handlers.JSON` — login/verify/request-code; presets `NewPasswordTOTP`, `NewEmailCode` |
 | Form-based login | DIY by design | caller-owned transport over `Flow.Submit`; pattern in `demo/examples/login/password.go` |
 | Logout | Implemented | `handlers/login.LogoutHandler(UserLogout, redirect)` |
-| Attempt stores | Implemented | `loginflow/attemptstore/{memory,cookie,db}` |
+| Attempt stores | Implemented | `flow/login/attemptstore/{memory,cookie,db}` |
 
 ## Self-registration (`register/`, see [register.md](register.md))
 
@@ -28,7 +28,7 @@ check here and in TODO.md — several gaps are known and have a chosen direction
 |---|---|---|
 | Registration engine | Implemented | `register.Flow` — pluggable checks, pending stores, single creation point |
 | Email verification | Implemented | `register.EmailCheck` over `VerificationCodeService` + `Deliverer` |
-| Invite codes | Implemented | `register/invite` (issue/list/revoke/consume, multi-use, expiry, email binding) + `register.InviteCheck` |
+| Invite codes | Implemented | `flow/register/invite` (issue/list/revoke/consume, multi-use, expiry, email binding) + `register.InviteCheck` |
 | Password policy hook | Implemented | `register.PasswordValidator` (registration only; `userdb.Create` is unhooked) |
 | JSON API registration | Implemented | `register/handlers.JSON` — register/verify/request-code; preset `New(Cfg)` |
 | Form-based registration | DIY by design | caller-owned transport over `Flow.Start`/`Flow.VerifyCheck`; pattern in `demo/examples/register.go` |
@@ -63,9 +63,9 @@ has enabled.
 | Feature | Status | Notes |
 |---|---|---|
 | `VerificationCodeService` | Implemented | policy owner: generate, SHA-256 hash, expiry, defaults (6 digits / 10 min) |
-| `CodeStore` backends | Partial | `codestore/memory` only; the `userdb` adapter (phase 2 of the hybrid design) has not landed — `userdb`'s verify methods do not satisfy `CodeVerifier` |
-| SMTP delivery | Implemented | `support/delivery/smtp` — HTML template (embedded default or custom path), `@/path` password-from-file |
-| File delivery | Implemented | `support/delivery/file` — one `<timestamp>-<to>.txt` per code; dev/testing |
+| `CodeStore` backends | Partial | `service/verificationcode/store/memory` only; the `userdb` adapter (phase 2 of the hybrid design) has not landed — `userdb`'s verify methods do not satisfy `CodeVerifier` |
+| SMTP delivery | Implemented | `service/verificationcode/deliver/smtp` — HTML template (embedded default or custom path), `@/path` password-from-file |
+| File delivery | Implemented | `service/verificationcode/deliver/file` — one `<timestamp>-<to>.txt` per code; dev/testing |
 
 ## Not implemented (catalogued in TODO.md)
 

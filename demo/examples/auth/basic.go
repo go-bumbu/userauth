@@ -8,8 +8,8 @@ import (
 	"net/http"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/auth/basicauth"
+	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/gorilla/mux"
 )
 

@@ -3,7 +3,7 @@ package userdb
 import (
 	"fmt"
 
-	"github.com/go-bumbu/userauth/support/hashutil"
+	"github.com/go-bumbu/userauth/internal/hashutil"
 	"gorm.io/gorm"
 )
 

@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/auth/cookieauth"
+	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 )

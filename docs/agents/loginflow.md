@@ -1,6 +1,6 @@
 # The login engine (`loginflow`)
 
-Read this before touching anything under `loginflow/`. The engine is
+Read this before touching anything under `flow/login/`. The engine is
 transport-agnostic and composable: a login attempt accumulates verified factors
 until a `Policy` says the requirements are met, and only then is the session
 created. It owns the security invariants callers tend to get wrong — do not
@@ -61,7 +61,7 @@ Flow
   multi-step policy with nil `Attempts` errors at the first incomplete
   submission.
 
-## Attempt stores (`loginflow/attemptstore/`)
+## Attempt stores (`flow/login/attemptstore/`)
 
 `Attempt.Satisfied` is an authentication claim — whoever controls it can skip
 factors. Implementations MUST keep it server-side or in an authenticated
@@ -77,7 +77,7 @@ Known wart (TODO.md): the `AttemptStore` interface takes `*http.Request` /
 `http.ResponseWriter` that memory and db ignore — it is shaped by the cookie
 implementation. Live with it until the interface is redesigned.
 
-## JSON transport (`loginflow/handlers`)
+## JSON transport (`flow/login/handlers`)
 
 `JSON` wraps a `*Flow` as three `http.Handler`s for SPAs:
 

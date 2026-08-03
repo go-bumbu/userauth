@@ -1,4 +1,4 @@
-# The registration engine (`register`) and invites (`register/invite`)
+# The registration engine (`register`) and invites (`flow/register/invite`)
 
 Read this before touching anything under `register/`. The engine
 is the registration counterpart of [loginflow](loginflow.md): transport-
@@ -32,7 +32,7 @@ register.Flow
 
 A `Check` verifies one requirement (`ID() + Verify(loginID, input)`,
 `(false, nil)` for wrong input, errors reserved for internal failures — same
-contract as `loginflow.Method`). Three optional capability interfaces refine
+contract as `login.Method`). Three optional capability interfaces refine
 when a check runs:
 
 - **`PreVerifier`** — verified synchronously at `Start` from the submitted
@@ -91,7 +91,7 @@ Same table as loginflow's attempt stores, same `(r, w)` interface wart
 | `cookie` | stateless / multi-instance | gorilla/securecookie signed+encrypted, `_pending_registration` cookie; instances must share keys |
 | `db` | production, multi-instance | GORM, `pending_registrations` table, one row per login ID; owns its model + auto-migration |
 
-## Invites (`register/invite/`)
+## Invites (`flow/register/invite/`)
 
 Admin-facing with its own lifecycle: `invite.Service` (policy: code
 generation, defaults) over an `invite.Store` (pure persistence) — the same

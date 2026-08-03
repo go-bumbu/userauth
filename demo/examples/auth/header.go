@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/auth/headerauth"
+	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/gorilla/mux"
 )
 

@@ -14,33 +14,52 @@ Related agent docs: [loginflow.md](loginflow.md) (the login engine internals),
 [features.md](features.md) (feature status), [testing.md](testing.md),
 [releasing.md](releasing.md).
 
-## Layering
+## Package model (restructured 2026-08-03)
+
+The tree is organized by role; every package is one of five kinds:
 
 ```
-loginflow/handlers   register/handlers (JSON transports)   auth/* (per-request auth)
-        |                    |                                     |
-    loginflow (engine)   register (engine)             chain / cookieauth / basicauth / headerauth
-   /     |      \       /    |        \                            |
-userstore attemptstore pendingstore register/invite  userauth.go  <- domain types + capability interfaces
-(staticusers, userdb)  (memory,     (memory, db)        VerificationCodeService
-         |              cookie, db)                          |
-       GORM                                    codestore/memory, userdb (stores)
-                                               support/delivery/{smtp,file} (Deliverer)
+userauth.go              vocabulary: domain types, capability interfaces, errors — no logic
+auth/                    request boundary: per-request authentication (chain, basicauth,
+                         cookieauth [+ LogoutHandler], headerauth)
+flow/                    engines: multi-step flows that establish credentials
+  login/                 login engine (handlers/, attemptstore/{memory,cookie,db})
+  register/              registration engine (handlers/, pendingstore/{memory,cookie,db},
+                         invite/{memory,db})
+userstore/               user persistence: adapters for the root user interfaces
+  staticusers/  userdb/
+service/verificationcode/  shared one-time-code service: Service, CodeStore, CodeVerifier,
+  store/memory/            Deliverer, with its own store/ and deliver/{smtp,file} adapters
+internal/hashutil/       crypto plumbing (bcrypt, SHA-256, AES-GCM) — not public API
+demo/                    consumer of the library; never imported by it
 ```
+
+Placement rules (they generated this tree; new packages should follow them):
+
+1. **Root = vocabulary only.** Types/interfaces/errors shared by ≥2 independent
+   subtrees. No implementation.
+2. **Adapters sit next to the interface they implement** — root interface →
+   top-level dir (`userstore/`), engine interface → nested (`attemptstore/`),
+   service interface → nested (`service/verificationcode/store/`).
+3. **Nest under X only if X owns your interface**; category dirs (`flow/`,
+   `service/`) contain only their kind and no `.go` files.
+4. **One consumer → nest under it; multiple consumers → top level**
+   (`invite` vs `verificationcode`).
+5. **Engines remember between requests; authenticators decide fresh per
+   request.** New multi-step thing → `flow/`; new credential check → `auth/`.
 
 - **`userauth.go` is the domain core**: `User`, `TOTPData`, `SecondFactor`, all
-  capability interfaces, `ErrUserNotFound`/`ErrUserDisabled`, and
-  `VerificationCodeService`. No HTTP.
-- **`loginflow` is the only login engine.** The old fixed login handlers
-  (`handlers/login/form.go`, `json.go`, `emailcode.go`, `verify2fa.go`) and the
-  `pendinglogin` package were removed in the `refactor-handler` branch;
-  `handlers/login` now holds only `LogoutHandler`. Anything login-shaped goes
-  through `loginflow.Flow` — see [loginflow.md](loginflow.md).
-- **`register` is the registration counterpart**: a pending registration
+  capability interfaces, `ErrUserNotFound`/`ErrUserDisabled`. No HTTP.
+- **`flow/login` (package `login`) is the only login engine.** The old fixed
+  login handlers and the `pendinglogin` package were removed in the
+  `refactor-handler` branch; `LogoutHandler` now lives in `auth/cookieauth`.
+  Anything login-shaped goes through `login.Flow` — see
+  [loginflow.md](loginflow.md).
+- **`flow/register` is the registration counterpart**: a pending registration
   accumulates verified checks (email verification, invite code) until all
   pass, then the account is created in exactly one place. Simpler than
-  loginflow by design (flat check list, no Policy) and deliberately not
-  enumeration-safe about taken usernames (409). `register/invite` is the
+  the login engine by design (flat check list, no Policy) and deliberately not
+  enumeration-safe about taken usernames (409). `flow/register/invite` is the
   admin-facing invite-code service (issue/list/revoke/consume) that the
   engine consumes via a consumer-side interface — see
   [register.md](register.md).
@@ -53,29 +72,33 @@ userstore attemptstore pendingstore register/invite  userauth.go  <- domain type
 
 - **Interface-driven, defined at the consumer**: every capability is a small
   interface declared where it is consumed, not where it is implemented
-  (e.g. `loginflow` defines `UserLogin` and `AttemptStore`; `cookieauth.Manager`
+  (e.g. `flow/login` defines `UserLogin` and `AttemptStore`; `cookieauth.Manager`
   satisfies `UserLogin` implicitly).
 - **Read/write split**: login uses read-only interfaces (`UserGetter`,
   `TOTPGetter`, `RecoveryCodeVerifier`, `CodeVerifier`, `SecondFactorProvider`);
   configuration uses separate write interfaces (`TOTPConfigurator`,
   `RecoveryCodeConfigurator`, `UserRegistrar`, `UserUpdater`) so read-only
   stores can still participate in login.
-- **Transport-agnostic core**: the `loginflow` engine works on user IDs,
-  passwords and codes; HTTP lives in transports (`loginflow/handlers`).
+- **Transport-agnostic core**: the login engine works on user IDs,
+  passwords and codes; HTTP lives in transports (`flow/login/handlers`).
 
 ## Verification codes: service = policy, store = persistence
 
 Redesigned 2026-06-30 (`../superpowers/specs/2026-06-30-verification-code-hybrid-design.md`):
 
-- **`userauth.VerificationCodeService` owns all policy**: numeric code
+The whole subsystem lives in `service/verificationcode` (extracted from the
+root package in the 2026-08-03 restructure): `Service`, `CodeStore`,
+`CodeVerifier` and `Deliverer` are all defined there.
+
+- **`verificationcode.Service` owns all policy**: numeric code
   generation, SHA-256 hashing, expiry, and the defaults (length 6, 10 min).
   Both hashing sites (issue and verify) live in this one type, so the
   issue/verify hash agreement cannot drift. Construct via
-  `NewVerificationCodeService` — zero-valued opts get the defaults.
+  `verificationcode.NewService` — zero-valued opts get the defaults.
 - **`CodeStore` implementations are pure persistence with zero crypto
   knowledge**: `StoreCode(userID, hash, expiresAt)` +
   `ConsumeCode(userID, hash)` — consume is atomic (one-time use).
-  `codestore/memory` is the in-repo implementation; one instance backs
+  `service/verificationcode/store/memory` is the in-repo implementation; one instance backs
   one channel (email or SMS).
 - **`CodeVerifier`** (`Verify(userID, code)`) is the channel-neutral login-side
   interface; the service implements it. It replaced the identical
@@ -84,8 +107,8 @@ Redesigned 2026-06-30 (`../superpowers/specs/2026-06-30-verification-code-hybrid
   **not** satisfy `CodeVerifier` (phase 2 of the redesign — a `CodeStore`
   adapter on the DB store — has not landed).
 - **`Deliverer`** (`Deliver(ctx, to, code, expiresAt)`) is orthogonal:
-  `support/delivery/smtp` (HTML template, `@/path` password-from-file) and
-  `support/delivery/file` (one file per code, for dev). `expiresAt` is informational —
+  `service/verificationcode/deliver/smtp` (HTML template, `@/path` password-from-file) and
+  `service/verificationcode/deliver/file` (one file per code, for dev). `expiresAt` is informational —
   expiry is enforced by the store.
 
 ## User stores
@@ -110,7 +133,7 @@ stale, the structure is not.
 `user_second_factor_flags`, `user_pending_email_changes`. Schema auto-migrates
 in `New`, which also validates the TOTP encryption key length.
 
-## Hashing strategy (`support/hashutil`)
+## Hashing strategy (`internal/hashutil`)
 
 - **Passwords and recovery codes: bcrypt** — slow hash for low-entropy secrets
   (recovery codes moved off SHA-256 deliberately; see TODO.md review items).
@@ -139,7 +162,7 @@ gorilla/sessions.
 - `gorilla/mux`, `gorilla/sessions`, `gorilla/securecookie` — HTTP + sessions
 - `pquerna/otp` — TOTP generation/validation
 - `golang.org/x/crypto` — bcrypt
-- `gorm.io/gorm` + `gorm.io/driver/sqlite` — `userdb`, `loginflow/attemptstore/db`
+- `gorm.io/gorm` + `gorm.io/driver/sqlite` — `userdb`, `flow/login/attemptstore/db`
 - `go-bumbu/http` — sibling module, **local `replace ../http` directive** in go.mod
 
 ## Known debt

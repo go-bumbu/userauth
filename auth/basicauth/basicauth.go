@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/support/hashutil"
+	"github.com/go-bumbu/userauth/internal/hashutil"
 )
 
 // AuthHandler verifies if basic auth information is present in the request and allows to log-in if credentials match.

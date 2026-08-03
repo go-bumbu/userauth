@@ -12,4 +12,9 @@ docs/spec/plans/
 cover.html
 cover.out
 coverage.out
+
+# AI stuff
+.playwright-mcp/
+docs/superpowers
+.superpowers
 .tokensave

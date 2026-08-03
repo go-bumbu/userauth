@@ -10,14 +10,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/auth/cookieauth"
-	logincookie "github.com/go-bumbu/userauth/handlers/login"
-	"github.com/go-bumbu/userauth/loginflow"
-	flowmemory "github.com/go-bumbu/userauth/loginflow/attemptstore/memory"
+	"github.com/go-bumbu/userauth/demo/web"
+	loginflow "github.com/go-bumbu/userauth/flow/login"
+	flowmemory "github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
+	"github.com/go-bumbu/userauth/service/verificationcode"
+	csmemory "github.com/go-bumbu/userauth/service/verificationcode/store/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
-	csmemory "github.com/go-bumbu/userauth/codestore/memory"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 )
@@ -47,7 +46,7 @@ func Email(log *slog.Logger, rnd *web.Renderer) http.Handler {
 		{Id: "demo@example.com", Enabled: true},
 	}}
 
-	codes := userauth.NewVerificationCodeService(csmemory.New(), userauth.VerificationCodeOpts{
+	codes := verificationcode.NewService(csmemory.New(), verificationcode.Opts{
 		CodeLength: 6,
 		Expiry:     10 * time.Minute,
 	})
@@ -96,7 +95,7 @@ func Email(log *slog.Logger, rnd *web.Renderer) http.Handler {
 	protected.Handle("", http.HandlerFunc(app.protected))
 	protected.Use(sessMgr.Middleware)
 
-	r.Path("/logout").Handler(logincookie.LogoutHandler(sessMgr, "/"))
+	r.Path("/logout").Handler(cookieauth.LogoutHandler(sessMgr, "/"))
 	return r
 }
 
@@ -192,7 +191,7 @@ func (a *emailLoginApp) addresses() []string {
 	return addrs
 }
 
-// demoCodeBoard is the demo's userauth.Deliverer: instead of emailing the code
+// demoCodeBoard is the demo's verificationcode.Deliverer: instead of emailing the code
 // it remembers the latest plaintext code per email so the verify page can
 // display it. The verification store only keeps a hash, so this is the only
 // place the plaintext survives.
@@ -205,7 +204,7 @@ func newDemoCodeBoard() *demoCodeBoard {
 	return &demoCodeBoard{codes: make(map[string]string)}
 }
 
-// Deliver implements userauth.Deliverer by stashing the code for display.
+// Deliver implements verificationcode.Deliverer by stashing the code for display.
 func (b *demoCodeBoard) Deliver(_ context.Context, to string, code string, _ time.Time) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()

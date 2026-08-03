@@ -11,11 +11,12 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/web"
-	"github.com/go-bumbu/userauth/register"
-	registerhandlers "github.com/go-bumbu/userauth/register/handlers"
-	pendingmemory "github.com/go-bumbu/userauth/register/pendingstore/memory"
+	"github.com/go-bumbu/userauth/flow/register"
+	registerhandlers "github.com/go-bumbu/userauth/flow/register/handlers"
+	pendingmemory "github.com/go-bumbu/userauth/flow/register/pendingstore/memory"
+	"github.com/go-bumbu/userauth/service/verificationcode"
+	csmemory "github.com/go-bumbu/userauth/service/verificationcode/store/memory"
 	"github.com/go-bumbu/userauth/userstore/userdb"
-	csmemory "github.com/go-bumbu/userauth/codestore/memory"
 )
 
 // Register handles user self-registration (password-based and
@@ -50,7 +51,7 @@ func (c userdbCreator) CreateVerifiedUser(u register.NewUser) error {
 func NewRegister(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) *Register {
 	creator := userdbCreator{users: users}
 	board := newRegisterCodeBoard()
-	codes := userauth.NewVerificationCodeService(csmemory.New(), userauth.VerificationCodeOpts{
+	codes := verificationcode.NewService(csmemory.New(), verificationcode.Opts{
 		CodeLength: 6,
 		Expiry:     10 * time.Minute,
 	})
@@ -210,7 +211,7 @@ func RegisterAPI(log *slog.Logger, users *userdb.Store) *registerhandlers.JSON {
 		Users:   users,
 		Creator: userdbCreator{users: users},
 		Pending: pendingmemory.New(),
-		Codes: userauth.NewVerificationCodeService(csmemory.New(), userauth.VerificationCodeOpts{
+		Codes: verificationcode.NewService(csmemory.New(), verificationcode.Opts{
 			CodeLength: 6,
 			Expiry:     10 * time.Minute,
 		}),
@@ -231,7 +232,7 @@ func (d logDeliverer) Deliver(_ context.Context, to string, code string, _ time.
 	return nil
 }
 
-// registerCodeBoard is the demo's userauth.Deliverer: instead of emailing
+// registerCodeBoard is the demo's verificationcode.Deliverer: instead of emailing
 // the code it remembers the latest plaintext code per email so the verify
 // page can display it. The verification store only keeps a hash, so this is
 // the only place the plaintext survives.
@@ -244,7 +245,7 @@ func newRegisterCodeBoard() *registerCodeBoard {
 	return &registerCodeBoard{codes: make(map[string]string)}
 }
 
-// Deliver implements userauth.Deliverer by stashing the code for display.
+// Deliver implements verificationcode.Deliverer by stashing the code for display.
 func (b *registerCodeBoard) Deliver(_ context.Context, to string, code string, _ time.Time) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()

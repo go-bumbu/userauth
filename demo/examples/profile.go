@@ -13,12 +13,11 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/auth/cookieauth"
-	logincookie "github.com/go-bumbu/userauth/handlers/login"
-	"github.com/go-bumbu/userauth/support/hashutil"
-	"github.com/go-bumbu/userauth/loginflow"
-	flowmemory "github.com/go-bumbu/userauth/loginflow/attemptstore/memory"
+	"github.com/go-bumbu/userauth/demo/web"
+	"github.com/go-bumbu/userauth/flow/login"
+	flowmemory "github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
+	"github.com/go-bumbu/userauth/internal/hashutil"
 	"github.com/go-bumbu/userauth/userstore/userdb"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
@@ -32,7 +31,7 @@ type profileApp struct {
 	users   *userdb.Store
 	rnd     *web.Renderer
 	sessMgr *cookieauth.Manager
-	flow    *loginflow.Flow
+	flow    *login.Flow
 }
 
 // Profile demonstrates an authenticated self-service area backed by the
@@ -59,20 +58,20 @@ func Profile(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Hand
 	// code or a recovery code completes the login. A PolicyFunc is used
 	// because the requirement is dynamic (per-user enrolment) and offers an
 	// alternative (recovery) that is not a second factor in its own right.
-	policy := loginflow.PolicyFunc(func(user userauth.User, satisfied []string) (bool, []string, error) {
-		if !slices.Contains(satisfied, loginflow.MethodPassword) {
-			return false, []string{loginflow.MethodPassword}, nil
+	policy := login.PolicyFunc(func(user userauth.User, satisfied []string) (bool, []string, error) {
+		if !slices.Contains(satisfied, login.MethodPassword) {
+			return false, []string{login.MethodPassword}, nil
 		}
 		totpData, err := users.GetTOTP(user.Id)
 		if err != nil {
 			return false, nil, err
 		}
 		if !totpData.Enabled ||
-			slices.Contains(satisfied, loginflow.MethodTOTP) ||
-			slices.Contains(satisfied, loginflow.MethodRecovery) {
+			slices.Contains(satisfied, login.MethodTOTP) ||
+			slices.Contains(satisfied, login.MethodRecovery) {
 			return true, nil, nil
 		}
-		return false, []string{loginflow.MethodTOTP, loginflow.MethodRecovery}, nil
+		return false, []string{login.MethodTOTP, login.MethodRecovery}, nil
 	})
 
 	a := &profileApp{
@@ -80,12 +79,12 @@ func Profile(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Hand
 		users:   users,
 		rnd:     rnd,
 		sessMgr: sessMgr,
-		flow: &loginflow.Flow{
+		flow: &login.Flow{
 			Users: users,
-			Methods: []loginflow.Method{
-				loginflow.PasswordMethod{Users: users},
-				loginflow.TOTPMethod{TOTP: users},
-				loginflow.RecoveryMethod{Codes: users},
+			Methods: []login.Method{
+				login.PasswordMethod{Users: users},
+				login.TOTPMethod{TOTP: users},
+				login.RecoveryMethod{Codes: users},
 			},
 			Policy:   policy,
 			Attempts: flowmemory.New(),
@@ -100,7 +99,7 @@ func Profile(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Hand
 	})
 	r.Path("/login").Methods(http.MethodPost).HandlerFunc(a.loginPost)
 	r.Path("/login/2fa").Methods(http.MethodPost).HandlerFunc(a.verify2FA)
-	r.Path("/logout").Handler(logincookie.LogoutHandler(a.sessMgr, "/"))
+	r.Path("/logout").Handler(cookieauth.LogoutHandler(a.sessMgr, "/"))
 	r.Path("/").Methods(http.MethodGet).Handler(a.requireAuth(http.HandlerFunc(a.view)))
 	r.Path("/change-password").Methods(http.MethodPost).Handler(a.requireAuth(http.HandlerFunc(a.changePassword)))
 	r.Path("/change-email").Methods(http.MethodPost).Handler(a.requireAuth(http.HandlerFunc(a.changeEmail)))
@@ -223,7 +222,7 @@ func (a *profileApp) loginPost(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(r.FormValue("username"))
 	password := r.FormValue("password")
 
-	res, err := a.flow.Submit(r, w, username, loginflow.MethodPassword, password, false)
+	res, err := a.flow.Submit(r, w, username, login.MethodPassword, password, false)
 	if err != nil {
 		http.Error(w, "login error", http.StatusInternalServerError)
 		return
@@ -245,13 +244,13 @@ func (a *profileApp) verify2FA(w http.ResponseWriter, r *http.Request) {
 	userID := strings.TrimSpace(r.FormValue("userID"))
 	code := strings.TrimSpace(r.FormValue("code"))
 
-	res, err := a.flow.Submit(r, w, userID, loginflow.MethodTOTP, code, false)
+	res, err := a.flow.Submit(r, w, userID, login.MethodTOTP, code, false)
 	if err != nil {
 		http.Error(w, "login error", http.StatusInternalServerError)
 		return
 	}
 	if !res.OK {
-		res, err = a.flow.Submit(r, w, userID, loginflow.MethodRecovery, code, false)
+		res, err = a.flow.Submit(r, w, userID, login.MethodRecovery, code, false)
 		if err != nil {
 			http.Error(w, "login error", http.StatusInternalServerError)
 			return

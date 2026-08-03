@@ -3,7 +3,7 @@
 ## Strategy
 
 - Table-driven tests, `go-cmp` for comparisons.
-- DB-backed packages (`userstore/userdb`, `loginflow/attemptstore/db`) test
+- DB-backed packages (`userstore/userdb`, `flow/login/attemptstore/db`) test
   against in-memory SQLite (`:memory:`) — no fixtures, no external services.
 - HTTP handlers are tested with `httptest`; the demo under `demo/examples/`
   doubles as integration coverage for the wired-together library
@@ -11,7 +11,7 @@
 - `userdb` tests are split per concern, mirroring the source files
   (`user_test.go`, `setup_test.go`, …).
 - Exported API examples live in `example_test.go` files (e.g.
-  `loginflow/example_test.go`) and run as part of the test suite.
+  `flow/login/example_test.go`) and run as part of the test suite.
 
 ## Make targets
 
