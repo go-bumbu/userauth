@@ -9,8 +9,8 @@
 * allow multiple user stores? use-case in db users + predefined static ones
 
 ### register
-* invite code
-* email verification
+* [x] invite code — `register/invite/` package + `register.InviteCheck`
+* [x] email verification — `register.EmailCheck` on top of VerificationCodeService
 
 ## session store
 * the current FS store based on gorilla only allows basic get and set, but to allow a user manage all the sessions
@@ -35,12 +35,9 @@ Items identified during a full architecture review of the library.
 
 ### Construction & Validation
 
-- [ ] **LoginHandler needs a constructor with validation**
-  Currently a bare struct with public fields. If a 2FA verifier is set but `SecondFactors` is nil, 2FA silently
-  never triggers. A `NewLoginHandler()` should validate invariants at startup.
 - [ ] **Inconsistent constructor patterns**
   Some packages use options structs (`cookieauth.Cfg`), some use positional args (`basicauth.NewHandler`),
-  `LoginHandler` has no constructor at all. Standardize on options structs.
+  `loginflow.Flow` is a bare struct validated lazily by `check()`. Standardize on options structs.
 
 ### Security
 
@@ -52,15 +49,15 @@ Items identified during a full architecture review of the library.
   at rest with a server-side key.
 - [ ] **No rate limiting or brute-force protection hooks**
   No interface for account lockout, login attempt tracking, or rate limiting. Provide at minimum a
-  `LoginAttemptRecorder` interface so consumers don't have to wrap `CanLogin` themselves.
+  `LoginAttemptRecorder` interface so consumers don't have to wrap `loginflow.Flow.Submit` themselves.
 - [ ] **No CSRF protection**
   Left entirely to the consumer with no guidance or helpers.
 
 ### Error Handling
 
 - [ ] **Password verification errors are swallowed**
-  `CanLogin` returns `Authenticated: false, nil` for both wrong passwords and corrupted hashes. Callers cannot
-  distinguish "wrong password" from "your database is corrupt."
+  `loginflow.PasswordMethod.Verify` (and `basicauth`) return `false, nil` for both wrong passwords and corrupted
+  hashes. Callers cannot distinguish "wrong password" from "your database is corrupt."
 - [ ] **Error types are too coarse**
   Only `ErrUserNotFound` and `ErrUserDisabled` exist. Missing: `ErrInvalidCredentials`, `ErrTOTPRequired`,
   `ErrCodeExpired` vs `ErrCodeInvalid`, `ErrAccountLocked`.
@@ -80,15 +77,17 @@ Items identified during a full architecture review of the library.
   users, or changing passwords. `dbusers` has some methods but they're not abstracted.
 - [ ] **No password policy enforcement**
   `dbusers.Create` accepts any password. No hooks for minimum length/complexity, breach checking, or password
-  history.
+  history. Partially addressed: `register.Flow` has a `PasswordValidator` hook, so self-registration can enforce
+  a policy; `userdb.Create` itself is still unhooked.
 - [ ] **No account recovery flow**
   Recovery codes exist but there's no email-based password reset flow.
 
 ### Design & Coupling
 
-- [ ] **`PendingLogin` interfaces leak HTTP concerns**
-  `SetPendingLogin` takes `*http.Request` and `http.ResponseWriter` that memory and DB implementations ignore.
+- [ ] **`loginflow.AttemptStore` leaks HTTP concerns**
+  `Set`/`Clear` take `*http.Request` and `http.ResponseWriter` that memory and DB implementations ignore.
   The interface is shaped by the cookie implementation, not the domain. Separate storage from HTTP transport.
+  `register.PendingStore` consciously repeats the same shape for consistency — redesign both together.
 - [x] **Email/SMS code generation lives in `dbusers`**
   `GenerateEmailVerificationCode` and `GenerateSMSVerificationCode` are methods on `DbManager`. Code generation
   is domain logic (length, expiry, charset), not storage logic. Move to core or a dedicated service.

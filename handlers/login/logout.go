@@ -1,3 +1,5 @@
+// Package login provides session logout. Login flows (password, multi-factor,
+// passwordless email code) live in the loginflow package and its transports.
 package login
 
 import "net/http"

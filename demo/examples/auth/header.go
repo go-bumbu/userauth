@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-bumbu/userauth/demo/web"
-	"github.com/go-bumbu/userauth/handlers/auth/headerauth"
+	"github.com/go-bumbu/userauth/auth/headerauth"
 	"github.com/gorilla/mux"
 )
 

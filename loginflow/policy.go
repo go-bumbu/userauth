@@ -71,10 +71,9 @@ func chainNext(chain Chain, satisfied []string) string {
 	return ""
 }
 
-// SecondFactorAfter returns the dynamic policy that matches the semantics of
-// userauth.LoginHandler.CanLogin: the first factor alone is enough, unless
-// the provider reports enrolled second factors, in which case any one of them
-// is additionally required.
+// SecondFactorAfter returns the classic dynamic 2FA policy: the first factor
+// alone is enough, unless the provider reports enrolled second factors, in
+// which case any one of them is additionally required.
 //
 // The first factor is excluded from the required second factors: a user who
 // just proved control of their email is not asked for an email code again.

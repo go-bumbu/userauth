@@ -12,12 +12,12 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/web"
-	"github.com/go-bumbu/userauth/handlers/auth/cookieauth"
+	"github.com/go-bumbu/userauth/auth/cookieauth"
 	logincookie "github.com/go-bumbu/userauth/handlers/login"
 	"github.com/go-bumbu/userauth/loginflow"
-	flowmemory "github.com/go-bumbu/userauth/loginflow/memory"
+	flowmemory "github.com/go-bumbu/userauth/loginflow/attemptstore/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
-	vcmemory "github.com/go-bumbu/userauth/verificationcode/memory"
+	csmemory "github.com/go-bumbu/userauth/codestore/memory"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 )
@@ -47,7 +47,7 @@ func Email(log *slog.Logger, rnd *web.Renderer) http.Handler {
 		{Id: "demo@example.com", Enabled: true},
 	}}
 
-	codes := userauth.NewVerificationCodeService(vcmemory.New(), userauth.VerificationCodeOpts{
+	codes := userauth.NewVerificationCodeService(csmemory.New(), userauth.VerificationCodeOpts{
 		CodeLength: 6,
 		Expiry:     10 * time.Minute,
 	})

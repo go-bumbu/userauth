@@ -48,6 +48,12 @@ func New(cfg Cfg) http.Handler {
 	r.Path("/register/email").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.Email)
 	r.Path("/register/email/verify").Methods(http.MethodGet, http.MethodPost).HandlerFunc(reg.EmailVerify)
 
+	// the same registration flows as a JSON API for SPAs (register/handlers preset)
+	api := examples.RegisterAPI(cfg.Logger, cfg.Users)
+	r.Path("/api/register").Methods(http.MethodPost).Handler(api.RegisterHandler())
+	r.Path("/api/register/verify").Methods(http.MethodPost).Handler(api.VerifyHandler())
+	r.Path("/api/register/request-code").Methods(http.MethodPost).Handler(api.RequestCodeHandler())
+
 	// authenticated self-service area: password/email change and TOTP 2FA
 	r.PathPrefix("/profile/").Handler(http.StripPrefix("/profile", examples.Profile(cfg.Logger, cfg.Users, cfg.Web)))
 

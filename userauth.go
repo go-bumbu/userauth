@@ -9,8 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-bumbu/userauth/hashutil"
-	"github.com/pquerna/otp/totp"
+	"github.com/go-bumbu/userauth/support/hashutil"
 )
 
 // UsernameFormat is the policy for allowed login identifier format (e.g. email-only or plain).
@@ -98,12 +97,13 @@ const (
 	SecondFactorSMS   SecondFactor = "sms"
 )
 
-// SecondFactorProvider returns the list of second factors enabled for a user. LoginHandler uses this to decide Requires2FA and to expose available options.
+// SecondFactorProvider returns the list of second factors enabled for a user.
+// loginflow policies use this to decide whether a second factor is required.
 type SecondFactorProvider interface {
 	AvailableSecondFactors(userID string) ([]SecondFactor, error)
 }
 
-// TOTPGetter is the read-only interface for TOTP 2FA (authenticator app). LoginHandler uses this for TOTP verification.
+// TOTPGetter is the read-only interface for TOTP 2FA (authenticator app). loginflow.TOTPMethod uses this for TOTP verification.
 type TOTPGetter interface {
 	GetTOTP(userID string) (TOTPData, error)
 }
@@ -113,7 +113,7 @@ type RecoveryCodeVerifier interface {
 	VerifyRecoveryCode(userID, code string) (bool, error)
 }
 
-// UserRegistrar can create new users. When a LoginHandler's UserStore implements this, registration (e.g. POST /register) can be offered.
+// UserRegistrar can create new users. When the user store implements this, registration (e.g. POST /register) can be offered.
 type UserRegistrar interface {
 	Create(id string, pw string) error
 }
@@ -164,130 +164,6 @@ type CodeVerifier interface {
 // message (email, SMS, file, Slack, etc.).
 type Deliverer interface {
 	Deliver(ctx context.Context, to string, code string, expiresAt time.Time) error
-}
-
-// LoginHandler checks user credentials and optional 2FA. It depends only on read interfaces (no store interface).
-// Wire SecondFactors to report which 2FA methods are available for a user; wire TOTP, RecoveryCode, EmailCode, and/or SMSCode when the store supports each for verification.
-type LoginHandler struct {
-	UserStore     UserGetter           // user lookup for login
-	SecondFactors SecondFactorProvider // optional; when set, used to determine Requires2FA and available second factors
-	TOTP          TOTPGetter           // optional; when set and in AvailableSecondFactors, login can use TOTP
-	RecoveryCode  RecoveryCodeVerifier // optional; when set, login can use recovery codes (typically alongside TOTP)
-	EmailCode     CodeVerifier         // optional; verify a one-time email code
-	SMSCode       CodeVerifier         // optional; verify a one-time SMS code
-}
-
-type LoginResult struct {
-	UserID                 string
-	Authenticated          bool
-	Requires2FA            bool
-	AvailableSecondFactors []SecondFactor // set when Requires2FA is true; which methods the user can use
-}
-
-func (lh *LoginHandler) CanLogin(userID string, plainPw string) (LoginResult, error) {
-	user, err := lh.UserStore.GetUser(userID)
-	if err != nil {
-		return LoginResult{Authenticated: false}, err
-	}
-	if !user.Enabled {
-		return LoginResult{Authenticated: false}, ErrUserDisabled
-	}
-
-	// verify password using hashutil
-	ok, err := hashutil.VerifyPassword(plainPw, user.HashPw)
-	if err != nil {
-		return LoginResult{Authenticated: false}, nil
-	}
-	if !ok {
-		return LoginResult{Authenticated: false}, nil
-	}
-
-	// optional: check if 2FA is required via single provider
-	if lh.SecondFactors != nil {
-		available, err := lh.SecondFactors.AvailableSecondFactors(userID)
-		if err != nil {
-			return LoginResult{Authenticated: false}, err
-		}
-		if len(available) > 0 {
-			return LoginResult{
-				Authenticated:          false,
-				UserID:                 user.Id,
-				Requires2FA:            true,
-				AvailableSecondFactors: available,
-			}, nil
-		}
-	}
-
-	return LoginResult{
-		UserID:        user.Id,
-		Authenticated: true,
-	}, nil
-}
-
-// VerifyTOTP verifies the code as TOTP (authenticator app) only.
-func (lh *LoginHandler) VerifyTOTP(userID, code string) (LoginResult, error) {
-	if lh.TOTP == nil {
-		return LoginResult{}, fmt.Errorf("TOTP not configured")
-	}
-	totpData, err := lh.TOTP.GetTOTP(userID)
-	if err != nil || !totpData.Enabled {
-		return LoginResult{Authenticated: false}, nil
-	}
-	if totp.Validate(code, totpData.Secret) {
-		return LoginResult{UserID: userID, Authenticated: true}, nil
-	}
-	return LoginResult{Authenticated: false}, nil
-}
-
-// VerifyRecoveryCode verifies the code as a recovery code only.
-func (lh *LoginHandler) VerifyRecoveryCode(userID, code string) (LoginResult, error) {
-	if lh.RecoveryCode == nil {
-		return LoginResult{}, fmt.Errorf("recovery codes not configured")
-	}
-	ok, err := lh.RecoveryCode.VerifyRecoveryCode(userID, code)
-	if err != nil {
-		return LoginResult{Authenticated: false}, err
-	}
-	if ok {
-		return LoginResult{UserID: userID, Authenticated: true}, nil
-	}
-	return LoginResult{Authenticated: false}, nil
-}
-
-// VerifyEmailCode verifies the given email verification code, consumes it on success, and returns a LoginResult.
-func (lh *LoginHandler) VerifyEmailCode(userID, code string) (LoginResult, error) {
-	if lh.EmailCode == nil {
-		return LoginResult{}, fmt.Errorf("email verification not configured")
-	}
-	ok, err := lh.EmailCode.Verify(userID, code)
-	if err != nil {
-		return LoginResult{Authenticated: false}, err
-	}
-	if !ok {
-		return LoginResult{Authenticated: false}, nil
-	}
-	return LoginResult{
-		UserID:        userID,
-		Authenticated: true,
-	}, nil
-}
-
-// VerifySMSCode verifies the given SMS verification code, consumes it on success, and returns a LoginResult.
-func (lh *LoginHandler) VerifySMSCode(userID, code string) (LoginResult, error) {
-	if lh.SMSCode == nil {
-		return LoginResult{}, fmt.Errorf("SMS verification not configured")
-	}
-	ok, err := lh.SMSCode.Verify(userID, code)
-	if err != nil {
-		return LoginResult{Authenticated: false}, err
-	}
-	if !ok {
-		return LoginResult{Authenticated: false}, nil
-	}
-	return LoginResult{
-		UserID:        userID,
-		Authenticated: true,
-	}, nil
 }
 
 // ErrUserNotFound is thrown when a user is not found

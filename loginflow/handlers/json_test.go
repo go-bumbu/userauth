@@ -11,10 +11,10 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/loginflow"
+	"github.com/go-bumbu/userauth/loginflow/attemptstore/memory"
 	"github.com/go-bumbu/userauth/loginflow/handlers"
-	"github.com/go-bumbu/userauth/loginflow/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
-	vcmemory "github.com/go-bumbu/userauth/verificationcode/memory"
+	csmemory "github.com/go-bumbu/userauth/codestore/memory"
 	"github.com/google/go-cmp/cmp"
 	"github.com/pquerna/otp/totp"
 )
@@ -258,7 +258,7 @@ func emailCodeFixture() (*handlers.JSON, *captureDeliverer, *captureLogin) {
 	session := &captureLogin{}
 	j := handlers.NewEmailCode(handlers.EmailCodeCfg{
 		Users:   users,
-		Codes:   userauth.NewVerificationCodeService(vcmemory.New(), userauth.VerificationCodeOpts{}),
+		Codes:   userauth.NewVerificationCodeService(csmemory.New(), userauth.VerificationCodeOpts{}),
 		Deliver: deliverer,
 		Session: session,
 	})

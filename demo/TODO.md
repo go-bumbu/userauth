@@ -1,13 +1,12 @@
 # Demo TODO
 
 ## 2FA / Multi-step login
-- [ ] JSON login endpoint (`handlers/login/json.go` — `JsonAuthHandler`)
-- [x] Pending login state management (bridges step 1 → step 2 of 2FA)
-- [x] TOTP verification step (`LoginHandler.VerifyTOTP`)
-- [ ] Email 2FA verification step (`LoginHandler.VerifyEmailCode`)
-- [ ] SMS 2FA verification step (`LoginHandler.VerifySMSCode`)
-- [x] Recovery code verification step (`LoginHandler.VerifyRecoveryCode`)
-- [ ] The `Verify2FAHandler` endpoint wiring them all together
+- [ ] JSON login endpoints (`loginflow/handlers` — `JSON.LoginHandler`/`VerifyHandler`/`RequestCodeHandler`)
+- [x] Login attempt state management (`loginflow.AttemptStore`, bridges factor submissions)
+- [x] TOTP verification step (`loginflow.TOTPMethod`)
+- [ ] Email 2FA verification step (`loginflow.CodeMethod` as second factor)
+- [ ] SMS 2FA verification step (`loginflow.CodeMethod` with an SMS deliverer)
+- [x] Recovery code verification step (`loginflow.RecoveryMethod`)
 
 ## User management
 - [ ] User registration (`UserRegistrar` / `dbusers.DbManager.Create`)
@@ -37,10 +36,10 @@
 - [ ] `dbusers.DbManager` as a drop-in replacement for `staticusers`
 - [ ] `dbusers.ManagerOpts` (bcrypt cost, default-enabled, username format, TOTP encryption key)
 
-## Pending login stores
-- [x] In-memory (`pendinglogin/memory`) — current session, no persistence
-- [ ] Cookie-based (`pendinglogin/cookie`) — survives process restart
-- [ ] DB-backed (`pendinglogin/db`) — multi-instance safe
+## Login attempt stores
+- [x] In-memory (`loginflow/attemptstore/memory`) — current session, no persistence
+- [ ] Cookie-based (`loginflow/attemptstore/cookie`) — survives process restart
+- [ ] DB-backed (`loginflow/attemptstore/db`) — multi-instance safe
 
 ## Auth chain
 - [ ] `chain.Authenticator` — chain multiple auth handlers with authorized/unauthorized callbacks

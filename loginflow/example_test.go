@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/loginflow"
-	"github.com/go-bumbu/userauth/loginflow/memory"
+	"github.com/go-bumbu/userauth/loginflow/attemptstore/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
-	vcmemory "github.com/go-bumbu/userauth/verificationcode/memory"
+	csmemory "github.com/go-bumbu/userauth/codestore/memory"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -74,7 +74,7 @@ func Example_emailPlusTOTP() {
 	users := &staticusers.Users{Users: []staticusers.User{
 		{Id: "alice@example.com", Enabled: true, TOTPSecret: totpSecret},
 	}}
-	codes := userauth.NewVerificationCodeService(vcmemory.New(), userauth.VerificationCodeOpts{})
+	codes := userauth.NewVerificationCodeService(csmemory.New(), userauth.VerificationCodeOpts{})
 	mail := &printDeliverer{}
 
 	flow := &loginflow.Flow{
@@ -119,7 +119,7 @@ func Example_alternativeChains() {
 	users := &staticusers.Users{Users: []staticusers.User{
 		{Id: "bob", HashPw: userauth.MustHashPw("secret"), Enabled: true},
 	}}
-	codes := userauth.NewVerificationCodeService(vcmemory.New(), userauth.VerificationCodeOpts{})
+	codes := userauth.NewVerificationCodeService(csmemory.New(), userauth.VerificationCodeOpts{})
 	mail := &printDeliverer{}
 
 	flow := &loginflow.Flow{
@@ -150,7 +150,7 @@ func Example_alternativeChains() {
 	// email chain: ok=true done=true
 }
 
-// ExampleSecondFactorAfter reproduces the classic CanLogin behavior: password
+// ExampleSecondFactorAfter shows the classic dynamic 2FA policy: password
 // is enough, unless the user has second factors enrolled — then one of them
 // is additionally required. Enrollment is read per user from the
 // SecondFactorProvider, so the same policy serves both kinds of users.

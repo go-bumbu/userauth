@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth"
-	"github.com/go-bumbu/userauth/hashutil"
+	"github.com/go-bumbu/userauth/support/hashutil"
 	"github.com/pquerna/otp/totp"
 )
 

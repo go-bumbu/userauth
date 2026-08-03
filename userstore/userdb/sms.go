@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/go-bumbu/userauth/hashutil"
+	"github.com/go-bumbu/userauth/support/hashutil"
 	"gorm.io/gorm"
 )
 

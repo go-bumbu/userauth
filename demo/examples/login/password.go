@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/web"
-	"github.com/go-bumbu/userauth/handlers/auth/cookieauth"
+	"github.com/go-bumbu/userauth/auth/cookieauth"
 	logincookie "github.com/go-bumbu/userauth/handlers/login"
 	"github.com/go-bumbu/userauth/loginflow"
 	"github.com/gorilla/mux"

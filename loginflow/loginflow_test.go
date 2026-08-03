@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/loginflow"
-	"github.com/go-bumbu/userauth/loginflow/memory"
+	"github.com/go-bumbu/userauth/loginflow/attemptstore/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
-	vcmemory "github.com/go-bumbu/userauth/verificationcode/memory"
+	csmemory "github.com/go-bumbu/userauth/codestore/memory"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -57,7 +57,7 @@ func newFixture(policy loginflow.Policy) *fixture {
 		{Id: "bob", HashPw: userauth.MustHashPw("bob-pw"), Enabled: true},
 		{Id: "carol", HashPw: userauth.MustHashPw("carol-pw"), Enabled: false},
 	}}
-	codes := userauth.NewVerificationCodeService(vcmemory.New(), userauth.VerificationCodeOpts{})
+	codes := userauth.NewVerificationCodeService(csmemory.New(), userauth.VerificationCodeOpts{})
 	deliverer := &captureDeliverer{}
 	session := &captureLogin{}
 	flow := &loginflow.Flow{
@@ -317,8 +317,8 @@ func TestFlowKeepLoggedIn(t *testing.T) {
 	}
 }
 
-func TestFlowCanLoginParity(t *testing.T) {
-	// SecondFactorAfter("password", provider) must reproduce CanLogin
+func TestFlowSecondFactorAfter(t *testing.T) {
+	// SecondFactorAfter("password", provider) implements the classic 2FA
 	// semantics: alice (TOTP enrolled) needs a second factor, bob does not.
 	f := newFixture(nil)
 	f.flow.Policy = loginflow.SecondFactorAfter("password", f.users)

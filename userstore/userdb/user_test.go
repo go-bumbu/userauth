@@ -3,7 +3,7 @@ package userdb
 import (
 	"testing"
 
-	"github.com/go-bumbu/userauth/hashutil"
+	"github.com/go-bumbu/userauth/support/hashutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/crypto/bcrypt"
