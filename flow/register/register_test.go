@@ -169,6 +169,9 @@ func TestOpenRegistration(t *testing.T) {
 		}
 	})
 
+}
+
+func TestOpenRegistrationValidation(t *testing.T) {
 	t.Run("empty login and empty password are validation errors", func(t *testing.T) {
 		f := newFixture(nil)
 		var vErr *register.ValidationError
@@ -214,6 +217,9 @@ func TestOpenRegistration(t *testing.T) {
 		}
 	})
 
+}
+
+func TestOpenRegistrationSession(t *testing.T) {
 	t.Run("auto-login when a session creator is configured", func(t *testing.T) {
 		f := newFixture(func(f *fixture) { f.flow.Session = f.session })
 		if _, err := start(t, f, register.StartInput{LoginID: "alice", Password: "pw"}); err != nil {
@@ -243,8 +249,11 @@ func TestOpenRegistration(t *testing.T) {
 	})
 }
 
+// emailInput is the canonical start input for the email-verification tests.
+var emailInput = register.StartInput{LoginID: "alice", Password: "pw", Email: "alice@example.com"}
+
 func TestEmailVerification(t *testing.T) {
-	input := register.StartInput{LoginID: "alice", Password: "pw", Email: "alice@example.com"}
+	input := emailInput
 
 	t.Run("full round trip", func(t *testing.T) {
 		f := newFixture(withEmailCheck)
@@ -297,6 +306,11 @@ func TestEmailVerification(t *testing.T) {
 			t.Fatal("user must not be created on wrong code")
 		}
 	})
+
+}
+
+func TestEmailVerificationPendingState(t *testing.T) {
+	input := emailInput
 
 	t.Run("verify without pending registration is rejected uniformly", func(t *testing.T) {
 		f := newFixture(withEmailCheck)
@@ -367,6 +381,11 @@ func TestEmailVerification(t *testing.T) {
 			t.Fatalf("want ValidationError for missing email, got %v", err)
 		}
 	})
+
+}
+
+func TestEmailVerificationDeliveryAndConfig(t *testing.T) {
+	input := emailInput
 
 	t.Run("delivery failure is logged not returned", func(t *testing.T) {
 		f := newFixture(func(f *fixture) {
@@ -445,16 +464,17 @@ func TestEmailVerification(t *testing.T) {
 	})
 }
 
-func TestInviteRegistration(t *testing.T) {
-	issue := func(t *testing.T, f *fixture, opts invite.IssueOpts) string {
-		t.Helper()
-		inv, err := f.invites.Issue(opts)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return inv.Code
+// issue creates an invite on the fixture's service and returns its code.
+func issue(t *testing.T, f *fixture, opts invite.IssueOpts) string {
+	t.Helper()
+	inv, err := f.invites.Issue(opts)
+	if err != nil {
+		t.Fatal(err)
 	}
+	return inv.Code
+}
 
+func TestInviteRegistration(t *testing.T) {
 	t.Run("valid invite registers immediately and consumes", func(t *testing.T) {
 		f := newFixture(withInviteCheck)
 		code := issue(t, f, invite.IssueOpts{})
@@ -531,6 +551,9 @@ func TestInviteRegistration(t *testing.T) {
 		}
 	})
 
+}
+
+func TestInviteRegistrationWithEmailCheck(t *testing.T) {
 	t.Run("invite and email verification combined", func(t *testing.T) {
 		f := newFixture(func(f *fixture) {
 			withInviteCheck(f)

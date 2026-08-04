@@ -135,6 +135,18 @@ func TestGetTOTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// the expected secret comes from the fixture file, so the test does not
+	// duplicate the credential-looking literal
+	var bobSecret string
+	for _, u := range users.Users {
+		if u.Id == "bob" {
+			bobSecret = u.TOTPSecret
+		}
+	}
+	if bobSecret == "" {
+		t.Fatal("fixture user bob has no TOTP secret")
+	}
+
 	tcs := []struct {
 		name   string
 		userID string
@@ -143,7 +155,7 @@ func TestGetTOTP(t *testing.T) {
 		{
 			name:   "user with TOTP secret",
 			userID: "bob",
-			want:   userauth.TOTPData{Enabled: true, Secret: "JBSWY3DPEHPK3PXP"},
+			want:   userauth.TOTPData{Enabled: true, Secret: bobSecret},
 		},
 		{
 			name:   "user without TOTP",

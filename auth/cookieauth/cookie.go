@@ -99,7 +99,6 @@ func (m *Manager) HandleAuth(w http.ResponseWriter, r *http.Request) (allowAcces
 	}
 	if data.IsAuthenticated {
 		m.logger.Debug("session auth: user authenticated", "user", data.UserId)
-		allowAccess = true
 		CtxSetUserData(r, data)
 		err = m.updateExpiry(data, session, r, w)
 		if err != nil {

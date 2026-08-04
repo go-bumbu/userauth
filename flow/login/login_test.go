@@ -16,7 +16,15 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
-const totpSecret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+// totpSecret is a valid base32 TOTP secret generated once per test run, so no
+// credential-looking literal needs to live in the source.
+var totpSecret = func() string {
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "test", AccountName: "test"})
+	if err != nil {
+		panic(err)
+	}
+	return key.Secret()
+}()
 
 // captureDeliverer records the last delivered code instead of sending it.
 type captureDeliverer struct {

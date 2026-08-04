@@ -183,8 +183,21 @@ func TestList(t *testing.T) {
 		}
 	}
 
+}
+
+func TestListPagination(t *testing.T) {
+	mng := setup(t)
+	defer clean()
+
+	ids := []string{"u1", "u2", "u3", "u4", "u5"}
+	for _, id := range ids {
+		if err := mng.Create(id, "pw"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// page 1 of size 2
-	res, _ = mng.List(ListOpts{Limit: 2, Offset: 0})
+	res, _ := mng.List(ListOpts{Limit: 2, Offset: 0})
 	if res.Total != 5 {
 		t.Errorf("page1: want total 5, got %d", res.Total)
 	}

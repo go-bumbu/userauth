@@ -102,6 +102,7 @@ func New(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Handler 
 	r.Path("/change-password").Methods(http.MethodPost).Handler(a.requireAuth(http.HandlerFunc(a.changePassword)))
 	r.Path("/change-email").Methods(http.MethodPost).Handler(a.requireAuth(http.HandlerFunc(a.changeEmail)))
 	r.Path("/totp/setup").Methods(http.MethodPost).Handler(a.requireAuth(http.HandlerFunc(a.totpSetup)))
+	r.Path("/totp/qr.png").Methods(http.MethodGet).Handler(a.requireAuth(http.HandlerFunc(a.totpQR)))
 	r.Path("/totp/confirm").Methods(http.MethodPost).Handler(a.requireAuth(http.HandlerFunc(a.totpConfirm)))
 	r.Path("/totp/disable").Methods(http.MethodPost).Handler(a.requireAuth(http.HandlerFunc(a.totpDisable)))
 	return r

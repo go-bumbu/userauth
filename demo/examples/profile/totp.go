@@ -1,13 +1,11 @@
 package profile
 
 import (
-	"bytes"
 	"crypto/rand"
-	"encoding/base64"
-	"html/template"
 	"image/png"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/go-bumbu/userauth"
@@ -17,6 +15,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// totpIssuer is the issuer name shown in authenticator apps.
+const totpIssuer = "userauth-demo"
+
 // totpSetup generates a new TOTP secret, stores it disabled, and shows the enrolment QR code.
 func (a *app) totpSetup(w http.ResponseWriter, r *http.Request) {
 	ud, err := cookieauth.CtxGetUserData(r)
@@ -24,7 +25,7 @@ func (a *app) totpSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session error", http.StatusInternalServerError)
 		return
 	}
-	key, err := totp.Generate(totp.GenerateOpts{Issuer: "userauth-demo", AccountName: ud.UserId})
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: totpIssuer, AccountName: ud.UserId})
 	if err != nil {
 		http.Error(w, "could not generate TOTP secret", http.StatusInternalServerError)
 		return
@@ -33,15 +34,44 @@ func (a *app) totpSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not store TOTP secret", http.StatusInternalServerError)
 		return
 	}
-	qr, err := totpQRDataURI(key)
+	a.rnd.Render(w, r, "profile_totp_setup.tmpl.html", map[string]any{
+		"ShowQR": true,
+		"Secret": key.Secret(),
+	})
+}
+
+// totpQR serves the enrolment QR code for the user's pending TOTP secret as a
+// PNG. Serving the image from its own endpoint keeps the HTML template free of
+// raw data URIs (which would need an unsafe template.URL conversion).
+func (a *app) totpQR(w http.ResponseWriter, r *http.Request) {
+	ud, err := cookieauth.CtxGetUserData(r)
+	if err != nil {
+		http.Error(w, "session error", http.StatusInternalServerError)
+		return
+	}
+	data, err := a.users.GetTOTP(ud.UserId)
+	if err != nil || data.Secret == "" || data.Enabled {
+		http.NotFound(w, r)
+		return
+	}
+	key, err := otp.NewKeyFromURL("otpauth://totp/" +
+		url.PathEscape(totpIssuer+":"+ud.UserId) +
+		"?secret=" + url.QueryEscape(data.Secret) +
+		"&issuer=" + url.QueryEscape(totpIssuer))
+	if err != nil {
+		http.Error(w, "could not build TOTP key", http.StatusInternalServerError)
+		return
+	}
+	img, err := key.Image(220, 220)
 	if err != nil {
 		http.Error(w, "could not render QR", http.StatusInternalServerError)
 		return
 	}
-	a.rnd.Render(w, r, "profile_totp_setup.tmpl.html", map[string]any{
-		"QRDataURI": qr,
-		"Secret":    key.Secret(),
-	})
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := png.Encode(w, img); err != nil {
+		a.log.Error("profile: encoding TOTP QR png", "error", err)
+	}
 }
 
 // totpConfirm validates the first TOTP code, enables 2FA, and issues one-time recovery codes.
@@ -132,18 +162,4 @@ func generateRecoveryCodes(count int) ([]string, error) {
 		out = append(out, string(code))
 	}
 	return out, nil
-}
-
-// totpQRDataURI renders the key's otpauth URL as a base64 PNG data URI.
-// template.URL keeps html/template from rejecting the data: scheme in an <img src>.
-func totpQRDataURI(key *otp.Key) (template.URL, error) {
-	img, err := key.Image(220, 220)
-	if err != nil {
-		return "", err
-	}
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
-		return "", err
-	}
-	return template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())), nil
 }

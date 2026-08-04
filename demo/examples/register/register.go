@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -147,7 +148,8 @@ func (a *Forms) Email(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/register/email/verify?email="+email, http.StatusSeeOther)
+	target := url.URL{Path: "/register/email/verify", RawQuery: url.Values{"email": {email}}.Encode()}
+	http.Redirect(w, r, target.String(), http.StatusSeeOther)
 }
 
 // EmailVerify handles GET/POST /register/email/verify (validates the code;

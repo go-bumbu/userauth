@@ -110,6 +110,9 @@ func TestStore(t *testing.T) {
 		}
 	})
 
+}
+
+func TestStoreConsume(t *testing.T) {
 	t.Run("consume decrements", func(t *testing.T) {
 		store := newTestStore(t)
 		if err := store.Save(invite.Invite{Code: "abc", UsesLeft: 2}); err != nil {
@@ -174,6 +177,9 @@ func TestStore(t *testing.T) {
 		}
 	})
 
+}
+
+func TestStoreConcurrency(t *testing.T) {
 	t.Run("concurrent consume of single-use invite", func(t *testing.T) {
 		store := newTestStore(t)
 		if err := store.Save(invite.Invite{Code: "once", UsesLeft: 1}); err != nil {

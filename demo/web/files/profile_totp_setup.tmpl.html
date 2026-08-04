@@ -26,8 +26,8 @@
     then enter the 6-digit code it shows to confirm.
 </p>
 
-{{if .QRDataURI}}
-<p style="text-align:center;"><img src="{{.QRDataURI}}" alt="TOTP QR code" width="220" height="220"></p>
+{{if .ShowQR}}
+<p style="text-align:center;"><img src="/profile/totp/qr.png" alt="TOTP QR code" width="220" height="220"></p>
 {{end}}
 
 <p class="info" style="text-align:center;">Secret: <code class="totp-secret">{{.Secret}}</code></p>

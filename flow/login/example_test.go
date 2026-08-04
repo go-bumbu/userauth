@@ -71,9 +71,10 @@ func Example() {
 // mandatory second factor — a flow the fixed handlers cannot express, written
 // here as one line of policy.
 func Example_emailPlusTOTP() {
-	const totpSecret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+	// in a real deployment the secret is provisioned during TOTP enrolment
+	key, _ := totp.Generate(totp.GenerateOpts{Issuer: "example", AccountName: "alice@example.com"})
 	users := &staticusers.Users{Users: []staticusers.User{
-		{Id: "alice@example.com", Enabled: true, TOTPSecret: totpSecret},
+		{Id: "alice@example.com", Enabled: true, TOTPSecret: key.Secret()},
 	}}
 	codes := verificationcode.NewService(csmemory.New(), verificationcode.Opts{})
 	mail := &printDeliverer{}
@@ -103,7 +104,7 @@ func Example_emailPlusTOTP() {
 
 	// Step 3: the user submits their authenticator code; the policy is now
 	// satisfied and the session is created.
-	code, _ := totp.GenerateCode(totpSecret, time.Now())
+	code, _ := totp.GenerateCode(key.Secret(), time.Now())
 	res, _ = flow.Submit(r, w, "alice@example.com", login.MethodTOTP, code, false)
 	fmt.Printf("after totp: ok=%v done=%v\n", res.OK, res.Done)
 
@@ -156,10 +157,11 @@ func Example_alternativeChains() {
 // is additionally required. Enrollment is read per user from the
 // SecondFactorProvider, so the same policy serves both kinds of users.
 func ExampleSecondFactorAfter() {
-	const totpSecret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+	// in a real deployment the secret is provisioned during TOTP enrolment
+	key, _ := totp.Generate(totp.GenerateOpts{Issuer: "example", AccountName: "careful"})
 	users := &staticusers.Users{Users: []staticusers.User{
 		{Id: "plain", HashPw: hashutil.MustHashPassword("secret"), Enabled: true},
-		{Id: "careful", HashPw: hashutil.MustHashPassword("secret"), Enabled: true, TOTPSecret: totpSecret},
+		{Id: "careful", HashPw: hashutil.MustHashPassword("secret"), Enabled: true, TOTPSecret: key.Secret()},
 	}}
 
 	flow := &login.Flow{

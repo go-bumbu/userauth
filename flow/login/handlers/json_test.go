@@ -20,7 +20,15 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
-const totpSecret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+// totpSecret is a valid base32 TOTP secret generated once per test run, so no
+// credential-looking literal needs to live in the source.
+var totpSecret = func() string {
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "test", AccountName: "test"})
+	if err != nil {
+		panic(err)
+	}
+	return key.Secret()
+}()
 
 // captureLogin records LoginUser calls instead of creating a real session.
 type captureLogin struct {
@@ -138,6 +146,9 @@ func TestPasswordTOTPLogin(t *testing.T) {
 		}
 	})
 
+}
+
+func TestPasswordTOTPLoginRejections(t *testing.T) {
 	t.Run("credential failures are one uniform 401", func(t *testing.T) {
 		j, session := passwordTOTPFixture()
 		var bodies []string
@@ -189,6 +200,9 @@ func TestPasswordTOTPLogin(t *testing.T) {
 		}
 	})
 
+}
+
+func TestPasswordTOTPBadRequests(t *testing.T) {
 	t.Run("malformed requests are 400", func(t *testing.T) {
 		j, _ := passwordTOTPFixture()
 		for name, payload := range map[string]any{
@@ -216,6 +230,9 @@ func TestPasswordTOTPLogin(t *testing.T) {
 		}
 	})
 
+}
+
+func TestPasswordTOTPRecoveryCode(t *testing.T) {
 	t.Run("recovery code stands in for totp when configured", func(t *testing.T) {
 		users := &staticusers.Users{Users: []staticusers.User{
 			{Id: "careful", HashPw: hashutil.MustHashPassword("pw"), Enabled: true, TOTPSecret: totpSecret},

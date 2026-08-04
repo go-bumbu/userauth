@@ -2,6 +2,7 @@ package userdb
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/go-bumbu/userauth"
@@ -123,6 +124,9 @@ func TestBootstrap(t *testing.T) {
 		}
 	})
 
+}
+
+func TestBootstrapPasswordHashing(t *testing.T) {
 	t.Run("pre-hashed password", func(t *testing.T) {
 		mng := setup(t)
 		defer clean()
@@ -148,7 +152,8 @@ func TestBootstrap(t *testing.T) {
 		mng := setup(t)
 		defer clean()
 
-		_, err := mng.Bootstrap(User{LoginID: "admin", Pw: "not-a-bcrypt-hash", PwIsHashed: true, Enabled: true})
+		notABcryptHash := strings.Repeat("x", 20)
+		_, err := mng.Bootstrap(User{LoginID: "admin", Pw: notABcryptHash, PwIsHashed: true, Enabled: true})
 		if err == nil {
 			t.Fatal("want error for non-bcrypt hash")
 		}
@@ -158,6 +163,9 @@ func TestBootstrap(t *testing.T) {
 		}
 	})
 
+}
+
+func TestBootstrapInvalidInput(t *testing.T) {
 	t.Run("partial failure rolls back all users", func(t *testing.T) {
 		mng := setup(t)
 		defer clean()
