@@ -16,7 +16,7 @@ import (
 // the deployment must guarantee clients cannot set the header themselves.
 func Header(log *slog.Logger, rnd *web.Renderer) http.Handler {
 	r := mux.NewRouter()
-	hauth := headerauth.New(headerauth.UserAuthHeader, true, log)
+	hauth := headerauth.New(headerauth.Cfg{Enforce: true, Logger: log})
 
 	r.Path("/protected").Methods(http.MethodGet).Handler(
 		hauth.Middleware(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

@@ -22,6 +22,9 @@ type User struct {
 	PrimaryEmailVerified bool   `yaml:"primary_email_verified"`
 	BackupEmail          string `yaml:"backup_email"`
 	BackupEmailVerified  bool   `yaml:"backup_email_verified"`
+	// Groups are the initial group memberships (optional). Group names are
+	// opaque to the library; see userauth.GroupsGetter.
+	Groups []string `yaml:"groups"`
 }
 
 func (s Store) Create(id string, pw string) error {
@@ -38,8 +41,11 @@ func (s Store) Create(id string, pw string) error {
 
 // CreateUser creates a user. When usr.PwIsHashed is true, Pw must be a valid
 // bcrypt hash and is stored as-is; otherwise Pw is hashed before storing.
+// The user row and any initial Groups are written in one transaction.
 func (s Store) CreateUser(usr User) error {
-	return s.createUser(s.db, usr)
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		return s.createUser(tx, usr)
+	})
 }
 
 // createUser is the shared create path; db may be the store handle or a transaction.
@@ -82,7 +88,13 @@ func (s Store) createUser(db *gorm.DB, usr User) error {
 		BackupEmailVerified:  usr.BackupEmailVerified,
 	}
 
-	return db.Create(&usrModel).Error
+	if err := db.Create(&usrModel).Error; err != nil {
+		return err
+	}
+	if len(usr.Groups) > 0 {
+		return s.setGroups(db, usrModel.UUID, usr.Groups)
+	}
+	return nil
 }
 
 // CreateUserWithHashedPassword creates a user with a pre-hashed password.
@@ -90,7 +102,7 @@ func (s Store) createUser(db *gorm.DB, usr User) error {
 // The password must be a valid bcrypt hash.
 func (s Store) CreateUserWithHashedPassword(usr User) error {
 	usr.PwIsHashed = true
-	return s.createUser(s.db, usr)
+	return s.CreateUser(usr)
 }
 
 // toUser maps the stored row to the public userauth.User.
@@ -144,9 +156,9 @@ func (s Store) IsEmpty() (bool, error) {
 	return total == 0, err
 }
 
-// Delete permanently removes a user and all associated data (TOTP config,
-// recovery codes, verification codes, second-factor flags, pending email
-// changes), so the login ID can be reused.
+// Delete permanently removes a user and all associated data (group
+// memberships, TOTP config, recovery codes, verification codes, second-factor
+// flags, pending email changes), so the login ID can be reused.
 // Returns userauth.ErrUserNotFound if the user does not exist.
 func (s Store) Delete(userID string) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
@@ -158,7 +170,7 @@ func (s Store) Delete(userID string) error {
 			return userauth.ErrUserNotFound
 		}
 		for _, m := range []interface{}{
-			&totpModel{}, &recoveryCodeModel{}, &emailVerificationCodeModel{},
+			&groupModel{}, &totpModel{}, &recoveryCodeModel{}, &emailVerificationCodeModel{},
 			&smsVerificationCodeModel{}, &secondFactorFlagsModel{}, &pendingEmailChangeModel{},
 		} {
 			if err := tx.Where("user_id = ?", userID).Delete(m).Error; err != nil {

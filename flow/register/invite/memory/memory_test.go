@@ -79,3 +79,39 @@ func TestStore(t *testing.T) {
 		}
 	})
 }
+
+func TestList(t *testing.T) {
+	store := memory.New()
+	got, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Errorf("want empty list, got %d invites", len(got))
+	}
+	invites := []invite.Invite{
+		{Code: "a", Note: "first", UsesLeft: 1},
+		{Code: "b", Note: "second", UsesLeft: 2},
+	}
+	for _, inv := range invites {
+		if err := store.Save(inv); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err = store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	byCode := map[string]invite.Invite{}
+	for _, inv := range got {
+		byCode[inv.Code] = inv
+	}
+	if len(byCode) != len(invites) {
+		t.Fatalf("want %d invites, got %d", len(invites), len(got))
+	}
+	for _, want := range invites {
+		if diff := cmp.Diff(want, byCode[want.Code]); diff != "" {
+			t.Errorf("invite %q mismatch (-want +got):\n%s", want.Code, diff)
+		}
+	}
+}

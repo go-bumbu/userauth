@@ -1,6 +1,10 @@
 package smtp
 
 import (
+	"bufio"
+	"context"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,6 +102,163 @@ func TestNew_CustomTemplate(t *testing.T) {
 	}
 	if d == nil {
 		t.Fatal("expected non-nil deliverer")
+	}
+}
+
+func TestNew_MissingPasswordFile(t *testing.T) {
+	_, err := New(Config{
+		Host:     "smtp.example.com",
+		Port:     587,
+		From:     "noreply@example.com",
+		Password: "@/nonexistent/secret.txt",
+	})
+	if err == nil {
+		t.Fatal("expected error for missing password file")
+	}
+}
+
+func TestNew_MissingTemplateFile(t *testing.T) {
+	_, err := New(Config{
+		Host:         "smtp.example.com",
+		Port:         587,
+		From:         "noreply@example.com",
+		TemplatePath: "/nonexistent/template.html",
+	})
+	if err == nil {
+		t.Fatal("expected error for missing template file")
+	}
+}
+
+// fakeSMTPHandler speaks just enough SMTP for net/smtp.SendMail to succeed.
+func fakeSMTPHandler(conn net.Conn) {
+	defer func() { _ = conn.Close() }()
+	reply := func(s string) { _, _ = fmt.Fprint(conn, s) }
+	r := bufio.NewReader(conn)
+	reply("220 test ESMTP\r\n")
+	inData := false
+	for {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if inData {
+			if line == "." {
+				inData = false
+				reply("250 ok\r\n")
+			}
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "EHLO"), strings.HasPrefix(line, "HELO"):
+			reply("250-test\r\n250 AUTH PLAIN\r\n")
+		case strings.HasPrefix(line, "AUTH"):
+			reply("235 authenticated\r\n")
+		case strings.HasPrefix(line, "DATA"):
+			inData = true
+			reply("354 go ahead\r\n")
+		case strings.HasPrefix(line, "QUIT"):
+			reply("221 bye\r\n")
+			return
+		default:
+			reply("250 ok\r\n")
+		}
+	}
+}
+
+// startFakeSMTP starts a minimal SMTP server on a random local port.
+func startFakeSMTP(t *testing.T) (host string, port int) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go fakeSMTPHandler(conn)
+		}
+	}()
+	addr := ln.Addr().(*net.TCPAddr)
+	return "127.0.0.1", addr.Port
+}
+
+func TestDeliver_Success(t *testing.T) {
+	host, port := startFakeSMTP(t)
+	d, err := New(Config{
+		Host:     host,
+		Port:     port,
+		From:     "noreply@example.com",
+		Username: "user",
+		Password: "secret",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expiresAt := time.Now().Add(10 * time.Minute)
+	if err := d.Deliver(context.Background(), "user@example.com", "654321", expiresAt); err != nil {
+		t.Fatalf("unexpected deliver error: %v", err)
+	}
+}
+
+func TestDeliver_ConnectionRefused(t *testing.T) {
+	// Grab a free port and close the listener so nothing is listening on it.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	d, err := New(Config{
+		Host: "127.0.0.1",
+		Port: port,
+		From: "noreply@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = d.Deliver(context.Background(), "user@example.com", "654321", time.Now().Add(time.Minute))
+	if err == nil {
+		t.Fatal("expected error for refused connection")
+	}
+	if !strings.Contains(err.Error(), "send") {
+		t.Errorf("expected send error, got: %v", err)
+	}
+}
+
+func TestDeliver_RenderError(t *testing.T) {
+	dir := t.TempDir()
+	tmplPath := filepath.Join(dir, "bad.html")
+	// References a field that does not exist on TemplateData, so Execute fails.
+	if err := os.WriteFile(tmplPath, []byte(`<p>{{.NoSuchField}}</p>`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	d, err := New(Config{
+		Host:         "smtp.example.com",
+		Port:         587,
+		From:         "noreply@example.com",
+		TemplatePath: tmplPath,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = d.Deliver(context.Background(), "user@example.com", "654321", time.Now().Add(time.Minute))
+	if err == nil {
+		t.Fatal("expected render error")
+	}
+	if !strings.Contains(err.Error(), "render") {
+		t.Errorf("expected render error, got: %v", err)
 	}
 }
 

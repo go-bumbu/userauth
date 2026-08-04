@@ -36,7 +36,7 @@ type Opts struct {
 func New(db *gorm.DB, opts Opts) (*Store, error) {
 
 	// Migrate the schema
-	err := db.AutoMigrate(&userModel{}, &totpModel{}, &recoveryCodeModel{}, &emailVerificationCodeModel{}, &smsVerificationCodeModel{}, &secondFactorFlagsModel{}, &pendingEmailChangeModel{})
+	err := db.AutoMigrate(&userModel{}, &groupModel{}, &totpModel{}, &recoveryCodeModel{}, &emailVerificationCodeModel{}, &smsVerificationCodeModel{}, &secondFactorFlagsModel{}, &pendingEmailChangeModel{})
 	if err != nil {
 		return nil, err
 	}

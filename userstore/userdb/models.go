@@ -28,6 +28,21 @@ type userModel struct {
 	BackupEmailVerified  bool
 }
 
+// groupModel stores one group membership per row (user_groups table,
+// UserID = user UUID). Group values are opaque to the library: they are
+// identity facts ("who is this user"), never policy — what a membership
+// permits is defined entirely by the consuming application.
+// The column is group_name (not "group") to keep raw SQL free of reserved-word
+// quoting across dialects.
+type groupModel struct {
+	ID        uint   `gorm:"primaryKey"`
+	UserID    string `gorm:"index:idx_user_group,unique;not null"`
+	Group     string `gorm:"column:group_name;index:idx_user_group,unique;not null"`
+	CreatedAt time.Time
+}
+
+func (groupModel) TableName() string { return "user_groups" }
+
 // totpModel stores TOTP secret and enabled flag per user (UserID = user UUID).
 type totpModel struct {
 	ID        uint   `gorm:"primaryKey"`

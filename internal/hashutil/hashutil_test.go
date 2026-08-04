@@ -2,6 +2,7 @@ package hashutil
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -93,10 +94,114 @@ func TestHashCodeSHA256(t *testing.T) {
 }
 
 func TestAlg(t *testing.T) {
-	if Alg("$2b$10$xyz") != Bcrypt {
-		t.Error("bcrypt hash should be detected")
+	tests := []struct {
+		name string
+		hash string
+		want HashAlgo
+	}{
+		{name: "legacy $2$ prefix", hash: "$2$10$xyz", want: Bcrypt},
+		{name: "$2a$ prefix", hash: "$2a$10$xyz", want: Bcrypt},
+		{name: "$2b$ prefix", hash: "$2b$10$xyz", want: Bcrypt},
+		{name: "$2x$ prefix", hash: "$2x$10$xyz", want: Bcrypt},
+		{name: "$2y$ prefix", hash: "$2y$10$xyz", want: Bcrypt},
+		{name: "plain text", hash: "plain", want: Unknown},
+		{name: "empty string", hash: "", want: Unknown},
+		{name: "shorter than prefix", hash: "$2a", want: Unknown},
+		{name: "unknown dollar prefix", hash: "$9z$10$xyz", want: Unknown},
 	}
-	if Alg("plain") != Unknown {
-		t.Error("plain text should be Unknown")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Alg(tc.hash); got != tc.want {
+				t.Errorf("Alg(%q) = %v, want %v", tc.hash, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMustHashPassword(t *testing.T) {
+	hash := MustHashPassword("secret")
+	ok, err := VerifyPassword("secret", hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Error("MustHashPassword hash should verify against original password")
+	}
+}
+
+func TestMustHashPassword_Panics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustHashPassword should panic when hashing fails")
+		}
+	}()
+	// bcrypt rejects passwords longer than 72 bytes, forcing the panic path.
+	MustHashPassword(strings.Repeat("a", 73))
+}
+
+func TestVerifyPassword_MalformedBcryptHash(t *testing.T) {
+	// Bcrypt prefix so Alg detects it, but too short to be a valid hash:
+	// bcrypt returns a non-mismatch error which VerifyPassword must propagate.
+	ok, err := VerifyPassword("secret", "$2a$10$short")
+	if ok {
+		t.Error("malformed hash should not verify")
+	}
+	if err == nil {
+		t.Error("expected error for malformed bcrypt hash")
+	}
+	if errors.Is(err, ErrUnknownAlgorithm) {
+		t.Errorf("expected bcrypt error, got ErrUnknownAlgorithm: %v", err)
+	}
+}
+
+func TestGenerateRecoveryCodes(t *testing.T) {
+	t.Run("valid count", func(t *testing.T) {
+		codes, err := GenerateRecoveryCodes(5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(codes) != 5 {
+			t.Fatalf("want 5 codes, got %d", len(codes))
+		}
+		seen := map[string]bool{}
+		for _, code := range codes {
+			if len(code) != 8 {
+				t.Errorf("code %q should be 8 characters", code)
+			}
+			for _, r := range code {
+				if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyz0123456789", r) {
+					t.Errorf("code %q contains character %q outside charset", code, r)
+				}
+			}
+			seen[code] = true
+		}
+		if len(seen) != len(codes) {
+			t.Errorf("codes should be unique, got %d distinct of %d", len(seen), len(codes))
+		}
+	})
+
+	t.Run("invalid count", func(t *testing.T) {
+		for _, count := range []int{0, -1, 101} {
+			if _, err := GenerateRecoveryCodes(count); err == nil {
+				t.Errorf("GenerateRecoveryCodes(%d) should fail", count)
+			}
+		}
+	})
+}
+
+func TestGenerateNumericCode(t *testing.T) {
+	for _, length := range []int{0, 1, 6, 10} {
+		code, err := GenerateNumericCode(length)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(code) != length {
+			t.Errorf("want code of length %d, got %q (len %d)", length, code, len(code))
+		}
+		for _, r := range code {
+			if r < '0' || r > '9' {
+				t.Errorf("code %q contains non-digit %q", code, r)
+			}
+		}
 	}
 }
