@@ -22,7 +22,7 @@
     <tbody>
     {{range .Users}}
         <tr>
-            <td>{{.ID}}</td>
+            <td>{{.LoginID}}</td>
             <td>{{if .Enabled}}enabled{{else}}disabled{{end}}</td>
             <td>
                 <form method="POST" action="/useradmin/{{.ID}}/enable" style="display:inline">

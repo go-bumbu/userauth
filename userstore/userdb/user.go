@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/internal/hashutil"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -42,6 +43,7 @@ func (s Store) CreateUser(usr User) error {
 }
 
 // createUser is the shared create path; db may be the store handle or a transaction.
+// The stable UUID identity is generated here; the caller never supplies it.
 func (s Store) createUser(db *gorm.DB, usr User) error {
 	if usr.LoginID == "" {
 		return errors.New("login ID cannot be empty")
@@ -63,7 +65,13 @@ func (s Store) createUser(db *gorm.DB, usr User) error {
 		pw = string(hashedPasswd)
 	}
 
+	id, err := uuid.NewV7()
+	if err != nil {
+		return fmt.Errorf("generate user uuid: %w", err)
+	}
+
 	usrModel := userModel{
+		UUID:                 id.String(),
 		Name:                 usr.Name,
 		LoginID:              usr.LoginID,
 		Pw:                   pw,
@@ -88,7 +96,8 @@ func (s Store) CreateUserWithHashedPassword(usr User) error {
 // toUser maps the stored row to the public userauth.User.
 func (m userModel) toUser() userauth.User {
 	return userauth.User{
-		Id:                   m.LoginID,
+		ID:                   m.UUID,
+		LoginID:              m.LoginID,
 		HashPw:               m.Pw,
 		Enabled:              m.Enabled,
 		PrimaryEmail:         m.PrimaryEmail,
@@ -98,10 +107,20 @@ func (m userModel) toUser() userauth.User {
 	}
 }
 
-// GetUser implements userauth.UserGetter. Looks up user by login ID.
+// GetUser implements userauth.UserGetter. Looks up a user by canonical ID (UUID).
 func (s Store) GetUser(id string) (userauth.User, error) {
+	return s.getUser("uuid = ?", id)
+}
+
+// GetUserByLogin implements userauth.UserGetter. Looks up a user by login ID;
+// this is the login entry point only — everything downstream keys on User.ID.
+func (s Store) GetUserByLogin(loginID string) (userauth.User, error) {
+	return s.getUser("login_id = ?", loginID)
+}
+
+func (s Store) getUser(query string, arg string) (userauth.User, error) {
 	var m userModel
-	err := s.db.First(&m, "login_id = ?", id).Error
+	err := s.db.First(&m, query, arg).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return userauth.User{}, userauth.ErrUserNotFound
@@ -127,11 +146,11 @@ func (s Store) IsEmpty() (bool, error) {
 
 // Delete permanently removes a user and all associated data (TOTP config,
 // recovery codes, verification codes, second-factor flags, pending email
-// changes). The row is hard-deleted so the login ID can be reused.
+// changes), so the login ID can be reused.
 // Returns userauth.ErrUserNotFound if the user does not exist.
 func (s Store) Delete(userID string) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
-		res := tx.Unscoped().Where("login_id = ?", userID).Delete(&userModel{})
+		res := tx.Where("uuid = ?", userID).Delete(&userModel{})
 		if res.Error != nil {
 			return res.Error
 		}
@@ -142,7 +161,7 @@ func (s Store) Delete(userID string) error {
 			&totpModel{}, &recoveryCodeModel{}, &emailVerificationCodeModel{},
 			&smsVerificationCodeModel{}, &secondFactorFlagsModel{}, &pendingEmailChangeModel{},
 		} {
-			if err := tx.Unscoped().Where("user_id = ?", userID).Delete(m).Error; err != nil {
+			if err := tx.Where("user_id = ?", userID).Delete(m).Error; err != nil {
 				return err
 			}
 		}
@@ -199,9 +218,28 @@ func (s Store) List(opts ListOpts) (ListResult, error) {
 	return ListResult{Users: users, Total: int(total)}, nil
 }
 
+// SetLoginID changes the login identifier for a user. The canonical identity
+// (UUID) is untouched, so sessions, 2FA enrolments and satellite data survive
+// the rename. The new login ID must satisfy the store's username format and
+// not be taken.
+func (s Store) SetLoginID(userID, newLoginID string) error {
+	if err := userauth.ValidateLoginID(newLoginID, s.usernameFormat); err != nil {
+		return err
+	}
+	res := s.db.Model(&userModel{}).Where("uuid = ?", userID).
+		Update("login_id", newLoginID)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return userauth.ErrUserNotFound
+	}
+	return nil
+}
+
 // SetPrimaryEmail updates the primary email for a user. Resets PrimaryEmailVerified to false.
 func (s Store) SetPrimaryEmail(userID, email string) error {
-	return s.db.Model(&userModel{}).Where("login_id = ?", userID).
+	return s.db.Model(&userModel{}).Where("uuid = ?", userID).
 		Updates(map[string]interface{}{
 			"primary_email":          email,
 			"primary_email_verified": false,
@@ -210,19 +248,19 @@ func (s Store) SetPrimaryEmail(userID, email string) error {
 
 // SetPrimaryEmailVerified sets the primary email verified flag for a user.
 func (s Store) SetPrimaryEmailVerified(userID string, verified bool) error {
-	return s.db.Model(&userModel{}).Where("login_id = ?", userID).
+	return s.db.Model(&userModel{}).Where("uuid = ?", userID).
 		Update("primary_email_verified", verified).Error
 }
 
 // SetEnabled sets the enabled flag for a user.
 func (s Store) SetEnabled(userID string, enabled bool) error {
-	return s.db.Model(&userModel{}).Where("login_id = ?", userID).
+	return s.db.Model(&userModel{}).Where("uuid = ?", userID).
 		Update("enabled", enabled).Error
 }
 
 // SetPasswordHash updates the password hash for an existing user.
 // The hash should be a valid bcrypt hash. This method does not hash the input.
 func (s Store) SetPasswordHash(userID, hashedPw string) error {
-	return s.db.Model(&userModel{}).Where("login_id = ?", userID).
+	return s.db.Model(&userModel{}).Where("uuid = ?", userID).
 		Update("pw", hashedPw).Error
 }

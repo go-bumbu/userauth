@@ -25,14 +25,21 @@ type fakeUsers struct {
 
 func (u *fakeUsers) GetUser(id string) (userauth.User, error) {
 	if u.existing[id] {
-		return userauth.User{Id: id, Enabled: true}, nil
+		return userauth.User{ID: id, LoginID: id, Enabled: true}, nil
 	}
 	return userauth.User{}, userauth.ErrUserNotFound
 }
 
-// captureCreator records created users; optionally fails.
+func (u *fakeUsers) GetUserByLogin(loginID string) (userauth.User, error) {
+	return u.GetUser(loginID)
+}
+
+// captureCreator records created users; optionally fails. Like a real store,
+// it makes the created account visible in the user store (store) so the flow
+// can resolve it after creation (e.g. for auto-login).
 type captureCreator struct {
 	users []register.NewUser
+	store *fakeUsers
 	err   error
 }
 
@@ -41,6 +48,9 @@ func (c *captureCreator) CreateVerifiedUser(u register.NewUser) error {
 		return c.err
 	}
 	c.users = append(c.users, u)
+	if c.store != nil {
+		c.store.existing[u.LoginID] = true
+	}
 	return nil
 }
 
@@ -89,9 +99,10 @@ type fixture struct {
 }
 
 func newFixture(mod func(*fixture)) *fixture {
+	users := &fakeUsers{existing: map[string]bool{"taken": true}}
 	f := &fixture{
-		users:     &fakeUsers{existing: map[string]bool{"taken": true}},
-		creator:   &captureCreator{},
+		users:     users,
+		creator:   &captureCreator{store: users},
 		deliverer: &captureDeliverer{},
 		session:   &captureLogin{},
 		invites:   invite.New(invitememory.New(), invite.Opts{}),

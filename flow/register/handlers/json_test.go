@@ -26,9 +26,13 @@ type fakeUsers struct {
 
 func (u *fakeUsers) GetUser(id string) (userauth.User, error) {
 	if u.existing[id] {
-		return userauth.User{Id: id, Enabled: true}, nil
+		return userauth.User{ID: id, LoginID: id, Enabled: true}, nil
 	}
 	return userauth.User{}, userauth.ErrUserNotFound
+}
+
+func (u *fakeUsers) GetUserByLogin(loginID string) (userauth.User, error) {
+	return u.GetUser(loginID)
 }
 
 // captureCreator records created users.

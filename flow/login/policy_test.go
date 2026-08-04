@@ -65,7 +65,7 @@ func TestRequireAny(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			p := login.RequireAny(tc.chains...)
-			done, next, err := p.Next(userauth.User{Id: "u"}, tc.satisfied)
+			done, next, err := p.Next(userauth.User{ID: "u"}, tc.satisfied)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -126,7 +126,7 @@ func TestSecondFactorAfter(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			done, next, err := p.Next(userauth.User{Id: tc.userID}, tc.satisfied)
+			done, next, err := p.Next(userauth.User{ID: tc.userID}, tc.satisfied)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -144,7 +144,7 @@ func TestSecondFactorAfter(t *testing.T) {
 		// email code: proving email control twice adds nothing, so done.
 		provider := sfProvider{"u": {userauth.SecondFactorEmail}}
 		p := login.SecondFactorAfter("email", provider)
-		done, _, err := p.Next(userauth.User{Id: "u"}, []string{"email"})
+		done, _, err := p.Next(userauth.User{ID: "u"}, []string{"email"})
 		if err != nil {
 			t.Fatal(err)
 		}

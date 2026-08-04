@@ -66,7 +66,8 @@ func ValidateLoginID(loginID string, format UsernameFormat) error {
 }
 
 type User struct {
-	Id                   string // login identifier (same as loginId in store)
+	ID                   string // stable canonical identity (e.g. a UUID); never changes for the lifetime of the account
+	LoginID              string // current login identifier (username or email); mutable, used only to find the user at login
 	HashPw               string // hashed passwd in one of the supported algorithms
 	Enabled              bool   // flag if user is enabled
 	PrimaryEmail         string // primary email address
@@ -75,8 +76,12 @@ type User struct {
 	BackupEmailVerified  bool   // whether backup email has been verified
 }
 
+// UserGetter looks up users. GetUserByLogin is the login entry point (the
+// identifier the user typed); GetUser is the canonical lookup used everywhere
+// after that — sessions, verifiers and stores all key on User.ID.
 type UserGetter interface {
 	GetUser(id string) (User, error)
+	GetUserByLogin(loginID string) (User, error)
 }
 
 type TOTPData struct {

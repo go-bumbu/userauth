@@ -60,7 +60,7 @@ func New(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Handler 
 		if !slices.Contains(satisfied, login.MethodPassword) {
 			return false, []string{login.MethodPassword}, nil
 		}
-		totpData, err := users.GetTOTP(user.Id)
+		totpData, err := users.GetTOTP(user.ID)
 		if err != nil {
 			return false, nil, err
 		}
@@ -136,10 +136,10 @@ func (a *app) viewWithMsg(w http.ResponseWriter, r *http.Request, success, errMs
 		http.Error(w, "user not found", http.StatusInternalServerError)
 		return
 	}
-	totpData, _ := a.users.GetTOTP(user.Id)
-	recoveryCount, _ := a.users.GetRecoveryCodesCount(user.Id)
+	totpData, _ := a.users.GetTOTP(user.ID)
+	recoveryCount, _ := a.users.GetRecoveryCodesCount(user.ID)
 	a.rnd.Render(w, r, "profile.tmpl.html", map[string]any{
-		"UserID":        user.Id,
+		"UserID":        user.LoginID,
 		"Email":         user.PrimaryEmail,
 		"Enabled":       user.Enabled,
 		"Success":       success,

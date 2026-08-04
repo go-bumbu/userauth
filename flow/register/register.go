@@ -211,7 +211,7 @@ func (f *Flow) remaining(satisfied []string) []string {
 // userExists reports whether the login ID is taken. A non-nil error is an
 // internal store failure.
 func (f *Flow) userExists(loginID string) (bool, error) {
-	_, err := f.Users.GetUser(loginID)
+	_, err := f.Users.GetUserByLogin(loginID)
 	if err == nil {
 		return true, nil
 	}
@@ -471,7 +471,14 @@ func (f *Flow) finish(r *http.Request, w http.ResponseWriter, reg Registration) 
 	}
 
 	if f.Session != nil {
-		if err := f.Session.LoginUser(r, w, reg.LoginID, false); err != nil {
+		// The session keys on the canonical user ID, which only the store
+		// knows after creation: resolve the fresh account by its login ID.
+		// Auto-login failures are logged, not returned: the account exists
+		// and the user can log in normally.
+		user, err := f.Users.GetUserByLogin(reg.LoginID)
+		if err != nil {
+			f.logger().Error("register: resolving fresh account for auto-login failed", "loginID", reg.LoginID, "error", err)
+		} else if err := f.Session.LoginUser(r, w, user.ID, false); err != nil {
 			f.logger().Error("register: auto-login after registration failed", "loginID", reg.LoginID, "error", err)
 		}
 	}

@@ -80,7 +80,12 @@ func TestAPILoginWrongPassword(t *testing.T) {
 func TestAPILoginTOTPSecondFactor(t *testing.T) {
 	handler, users := mountAPI(t)
 	const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- test TOTP secret
-	if err := users.SetTOTP("demo", userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
+	// 2FA enrolment keys on the canonical user ID, not the login ID
+	usr, err := users.GetUserByLogin("demo")
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if err := users.SetTOTP(usr.ID, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
 		t.Fatalf("set totp: %v", err)
 	}
 

@@ -65,7 +65,7 @@ func TestBootstrap(t *testing.T) {
 			t.Error("want seeded=true on empty store")
 		}
 
-		u, err := mng.GetUser("admin")
+		u, err := mng.GetUserByLogin("admin")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -92,7 +92,7 @@ func TestBootstrap(t *testing.T) {
 		if seeded {
 			t.Error("want seeded=false on populated store")
 		}
-		if _, err := mng.GetUser("admin"); !errors.Is(err, userauth.ErrUserNotFound) {
+		if _, err := mng.GetUserByLogin("admin"); !errors.Is(err, userauth.ErrUserNotFound) {
 			t.Errorf("admin should not exist, got err=%v", err)
 		}
 	})
@@ -107,7 +107,11 @@ func TestBootstrap(t *testing.T) {
 		if err := mng.Create("admin2", "pw"); err != nil {
 			t.Fatal(err)
 		}
-		if err := mng.Delete("admin"); err != nil {
+		admin, err := mng.GetUserByLogin("admin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := mng.Delete(admin.ID); err != nil {
 			t.Fatal(err)
 		}
 
@@ -119,7 +123,7 @@ func TestBootstrap(t *testing.T) {
 		if seeded {
 			t.Error("want seeded=false, store is not empty")
 		}
-		if _, err := mng.GetUser("admin"); !errors.Is(err, userauth.ErrUserNotFound) {
+		if _, err := mng.GetUserByLogin("admin"); !errors.Is(err, userauth.ErrUserNotFound) {
 			t.Errorf("deleted admin should not be resurrected, got err=%v", err)
 		}
 	})
@@ -138,7 +142,7 @@ func TestBootstrapPasswordHashing(t *testing.T) {
 		if _, err := mng.Bootstrap(User{LoginID: "admin", Pw: string(hash), PwIsHashed: true, Enabled: true}); err != nil {
 			t.Fatal(err)
 		}
-		u, err := mng.GetUser("admin")
+		u, err := mng.GetUserByLogin("admin")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -200,18 +204,22 @@ func TestDelete(t *testing.T) {
 		if err := mng.Create("alice", "pw"); err != nil {
 			t.Fatal(err)
 		}
-		if err := mng.SetRecoveryCodes("alice", []string{hashutil.MustHashPassword("code1")}); err != nil {
+		alice, err := mng.GetUserByLogin("alice")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := mng.SetRecoveryCodes(alice.ID, []string{hashutil.MustHashPassword("code1")}); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := mng.Delete("alice"); err != nil {
+		if err := mng.Delete(alice.ID); err != nil {
 			t.Fatal(err)
 		}
 
-		if _, err := mng.GetUser("alice"); !errors.Is(err, userauth.ErrUserNotFound) {
+		if _, err := mng.GetUserByLogin("alice"); !errors.Is(err, userauth.ErrUserNotFound) {
 			t.Errorf("want ErrUserNotFound, got %v", err)
 		}
-		if n, _ := mng.GetRecoveryCodesCount("alice"); n != 0 {
+		if n, _ := mng.GetRecoveryCodesCount(alice.ID); n != 0 {
 			t.Errorf("want 0 recovery codes after delete, got %d", n)
 		}
 	})
@@ -223,7 +231,11 @@ func TestDelete(t *testing.T) {
 		if err := mng.Create("alice", "pw"); err != nil {
 			t.Fatal(err)
 		}
-		if err := mng.Delete("alice"); err != nil {
+		alice, err := mng.GetUserByLogin("alice")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := mng.Delete(alice.ID); err != nil {
 			t.Fatal(err)
 		}
 		if err := mng.Create("alice", "pw2"); err != nil {

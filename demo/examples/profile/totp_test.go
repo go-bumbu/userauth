@@ -14,6 +14,17 @@ import (
 
 var totpSecretRe = regexp.MustCompile(`totp-secret">([A-Z2-7]+)<`)
 
+// canonicalID resolves the login ID to the canonical user ID that store
+// methods (GetTOTP, GetRecoveryCodesCount, …) key on.
+func canonicalID(t *testing.T, users *userdb.Store, loginID string) string {
+	t.Helper()
+	usr, err := users.GetUserByLogin(loginID)
+	if err != nil {
+		t.Fatalf("get user %q: %v", loginID, err)
+	}
+	return usr.ID
+}
+
 // enrollTOTP logs in a fresh user (one-step), runs setup+confirm, and returns the
 // login cookies and the confirm-response recorder. Fails the test on any error.
 func enrollTOTP(t *testing.T, handler http.Handler, users *userdb.Store, uid string) ([]*http.Cookie, string) {
@@ -55,7 +66,7 @@ func TestProfileTOTPEnroll(t *testing.T) {
 	uid := "enroll@example.com"
 	enrollTOTP(t, handler, users, uid)
 
-	data, err := users.GetTOTP(uid)
+	data, err := users.GetTOTP(canonicalID(t, users, uid))
 	if err != nil {
 		t.Fatalf("get totp: %v", err)
 	}
@@ -77,7 +88,7 @@ func TestProfileTOTPDisable(t *testing.T) {
 	if w.Code != http.StatusOK && w.Code != http.StatusSeeOther {
 		t.Fatalf("disable: want 200 or 303, got %d", w.Code)
 	}
-	data, err := users.GetTOTP(uid)
+	data, err := users.GetTOTP(canonicalID(t, users, uid))
 	if err != nil {
 		t.Fatalf("get totp: %v", err)
 	}
@@ -109,7 +120,7 @@ func TestProfileTOTPRecoveryCodesShown(t *testing.T) {
 	if len(matches) != 6 {
 		t.Fatalf("want 6 recovery codes shown, got %d; body=%s", len(matches), cw.Body.String())
 	}
-	count, err := users.GetRecoveryCodesCount(uid)
+	count, err := users.GetRecoveryCodesCount(canonicalID(t, users, uid))
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
@@ -146,7 +157,7 @@ func TestProfileRecoveryCodeLogin(t *testing.T) {
 	if len(w.Result().Cookies()) == 0 {
 		t.Error("expected a session cookie after recovery-code login")
 	}
-	count, _ := users.GetRecoveryCodesCount(uid)
+	count, _ := users.GetRecoveryCodesCount(canonicalID(t, users, uid))
 	if count != 5 {
 		t.Errorf("want 5 remaining recovery codes after use, got %d", count)
 	}
@@ -169,7 +180,7 @@ func TestProfileTOTPDisableClearsRecoveryCodes(t *testing.T) {
 	cookies, _ := enrollTOTP(t, handler, users, uid)
 	_ = demotest.PostForm(handler, "/totp/disable", url.Values{}, cookies)
 
-	count, err := users.GetRecoveryCodesCount(uid)
+	count, err := users.GetRecoveryCodesCount(canonicalID(t, users, uid))
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}

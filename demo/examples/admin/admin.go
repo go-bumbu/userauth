@@ -13,9 +13,11 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// userRow is the per-user view model rendered in the admin table.
+// userRow is the per-user view model rendered in the admin table: the login
+// ID is what admins recognize, the canonical ID is what actions target.
 type userRow struct {
 	ID      string
+	LoginID string
 	Enabled bool
 }
 
@@ -67,7 +69,7 @@ func (a *usersAdminApp) listWithMsg(w http.ResponseWriter, r *http.Request, msg 
 
 	rows := make([]userRow, 0, len(res.Users))
 	for _, u := range res.Users {
-		rows = append(rows, userRow{ID: u.Id, Enabled: u.Enabled})
+		rows = append(rows, userRow{ID: u.ID, LoginID: u.LoginID, Enabled: u.Enabled})
 	}
 
 	// ceil(total / pageSize), floored at 1 so an empty store still reads "page 1 of 1".

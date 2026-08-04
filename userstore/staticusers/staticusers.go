@@ -18,7 +18,7 @@ var _ userauth.RecoveryCodeVerifier = &Users{}
 var _ userauth.SecondFactorProvider = &Users{}
 
 type User struct {
-	Id         string `yaml:"id" json:"id"`                   // user identifying string: e.g. name or email
+	Id         string `yaml:"id" json:"id"`                   // user identifying string: e.g. name or email; static users never rename, so it doubles as the canonical ID
 	HashPw     string `yaml:"pw" json:"pw"`                   // hashed password in one of the supported algorithms
 	Enabled    bool   `yaml:"enabled" json:"enabled"`         // flag if user is enabled
 	TOTPSecret string `yaml:"totp_secret" json:"totp_secret"` // base32 TOTP secret (optional); non-empty means TOTP available
@@ -37,7 +37,8 @@ func (stu *Users) GetUser(userId string) (userauth.User, error) {
 	for _, u := range stu.Users {
 		if userId == u.Id {
 			return userauth.User{
-				Id:           u.Id,
+				ID:           u.Id,
+				LoginID:      u.Id,
 				HashPw:       u.HashPw,
 				Enabled:      u.Enabled,
 				PrimaryEmail: u.Email2FA,
@@ -45,6 +46,12 @@ func (stu *Users) GetUser(userId string) (userauth.User, error) {
 		}
 	}
 	return userauth.User{}, userauth.ErrUserNotFound
+}
+
+// GetUserByLogin implements userauth.UserGetter. Static users never rename,
+// so the login ID and the canonical ID are the same value.
+func (stu *Users) GetUserByLogin(loginID string) (userauth.User, error) {
+	return stu.GetUser(loginID)
 }
 
 // GetTOTP implements userauth.TOTPGetter. Enabled derived from TOTPSecret presence.

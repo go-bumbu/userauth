@@ -25,7 +25,14 @@ func (a *app) totpSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session error", http.StatusInternalServerError)
 		return
 	}
-	key, err := totp.Generate(totp.GenerateOpts{Issuer: totpIssuer, AccountName: ud.UserId})
+	// the authenticator app shows the account name; use the human-readable
+	// login ID, not the canonical UUID the session carries
+	user, err := a.users.GetUser(ud.UserId)
+	if err != nil {
+		http.Error(w, "user not found", http.StatusInternalServerError)
+		return
+	}
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: totpIssuer, AccountName: user.LoginID})
 	if err != nil {
 		http.Error(w, "could not generate TOTP secret", http.StatusInternalServerError)
 		return
@@ -54,8 +61,13 @@ func (a *app) totpQR(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	user, err := a.users.GetUser(ud.UserId)
+	if err != nil {
+		http.Error(w, "user not found", http.StatusInternalServerError)
+		return
+	}
 	key, err := otp.NewKeyFromURL("otpauth://totp/" +
-		url.PathEscape(totpIssuer+":"+ud.UserId) +
+		url.PathEscape(totpIssuer+":"+user.LoginID) +
 		"?secret=" + url.QueryEscape(data.Secret) +
 		"&issuer=" + url.QueryEscape(totpIssuer))
 	if err != nil {

@@ -135,19 +135,20 @@ func (f *Flow) loadAttempt(r *http.Request, userID string) Attempt {
 	return Attempt{UserID: userID, ExpiresAt: time.Now().Add(f.expiry())}
 }
 
-// getEnabledUser is the shared known-and-enabled gate. The bool is false for
-// any credential-shaped reason; a non-nil error is an internal store failure.
-func (f *Flow) getEnabledUser(userID string) (userauth.User, bool, error) {
-	user, err := f.Users.GetUser(userID)
+// getEnabledUser is the shared known-and-enabled gate. It resolves the login
+// identifier the user typed to the canonical user. The bool is false for any
+// credential-shaped reason; a non-nil error is an internal store failure.
+func (f *Flow) getEnabledUser(loginID string) (userauth.User, bool, error) {
+	user, err := f.Users.GetUserByLogin(loginID)
 	if err != nil {
 		if errors.Is(err, userauth.ErrUserNotFound) {
-			f.logger().Debug("login: unknown user", "userID", userID)
+			f.logger().Debug("login: unknown user", "loginID", loginID)
 			return userauth.User{}, false, nil
 		}
 		return userauth.User{}, false, err
 	}
 	if !user.Enabled {
-		f.logger().Debug("login: user disabled", "userID", userID)
+		f.logger().Debug("login: user disabled", "loginID", loginID)
 		return userauth.User{}, false, nil
 	}
 	return user, true, nil
@@ -163,7 +164,7 @@ func (f *Flow) getEnabledUser(userID string) (userauth.User, bool, error) {
 // A non-nil error is an internal failure (misconfiguration, store or
 // verifier breakage) that transports should render as a generic 5xx. All
 // credential failures come back as (Result{OK: false}, nil).
-func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, userID, methodID, input string, keepLoggedIn bool) (Result, error) {
+func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, loginID, methodID, input string, keepLoggedIn bool) (Result, error) {
 	if err := f.check(); err != nil {
 		return Result{}, err
 	}
@@ -172,14 +173,14 @@ func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, userID, methodID, 
 		return Result{}, fmt.Errorf("login: method %q not registered", methodID)
 	}
 
-	user, ok, err := f.getEnabledUser(userID)
+	user, ok, err := f.getEnabledUser(loginID)
 	if err != nil || !ok {
 		return Result{}, err
 	}
 
-	// From here on, use the canonical user.Id: attempts, verifiers and the
+	// From here on, use the canonical user.ID: attempts, verifiers and the
 	// session must all agree on the same key.
-	att := f.loadAttempt(r, user.Id)
+	att := f.loadAttempt(r, user.ID)
 	if len(att.Satisfied) == 0 {
 		att.SessionKeepLoggedIn = keepLoggedIn
 	}
@@ -190,16 +191,16 @@ func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, userID, methodID, 
 		return Result{}, err
 	}
 	if !contains(next, methodID) {
-		f.logger().Debug("login: method not offered", "userID", user.Id, "method", methodID, "satisfied", att.Satisfied)
+		f.logger().Debug("login: method not offered", "userID", user.ID, "method", methodID, "satisfied", att.Satisfied)
 		return Result{}, nil
 	}
 
-	ok, err = m.Verify(user.Id, input)
+	ok, err = m.Verify(user.ID, input)
 	if err != nil {
 		return Result{}, fmt.Errorf("login: verify %s: %w", methodID, err)
 	}
 	if !ok {
-		f.logger().Debug("login: factor verification failed", "userID", user.Id, "method", methodID)
+		f.logger().Debug("login: factor verification failed", "userID", user.ID, "method", methodID)
 		return Result{}, nil
 	}
 
@@ -209,15 +210,15 @@ func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, userID, methodID, 
 		return Result{}, err
 	}
 	if done {
-		if err := f.Session.LoginUser(r, w, user.Id, att.SessionKeepLoggedIn); err != nil {
+		if err := f.Session.LoginUser(r, w, user.ID, att.SessionKeepLoggedIn); err != nil {
 			return Result{}, fmt.Errorf("login: create session: %w", err)
 		}
 		if f.Attempts != nil {
-			if err := f.Attempts.Clear(r, w, user.Id); err != nil {
-				f.logger().Error("login: failed to clear attempt", "userID", user.Id, "error", err)
+			if err := f.Attempts.Clear(r, w, user.ID); err != nil {
+				f.logger().Error("login: failed to clear attempt", "userID", user.ID, "error", err)
 			}
 		}
-		f.logger().Debug("login: login complete", "userID", user.Id, "satisfied", att.Satisfied)
+		f.logger().Debug("login: login complete", "userID", user.ID, "satisfied", att.Satisfied)
 		return Result{OK: true, Done: true}, nil
 	}
 
@@ -242,7 +243,7 @@ func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, userID, methodID, 
 // Note: when the Initiator delivers synchronously (e.g. blocking SMTP),
 // response timing can still reveal whether issuance happened; deliverers
 // should queue and return.
-func (f *Flow) Initiate(r *http.Request, userID, methodID string) error {
+func (f *Flow) Initiate(r *http.Request, loginID, methodID string) error {
 	if err := f.check(); err != nil {
 		return err
 	}
@@ -255,7 +256,7 @@ func (f *Flow) Initiate(r *http.Request, userID, methodID string) error {
 		return fmt.Errorf("login: method %q does not support initiation", methodID)
 	}
 
-	user, ok, err := f.getEnabledUser(userID)
+	user, ok, err := f.getEnabledUser(loginID)
 	if err != nil {
 		return err
 	}
@@ -263,18 +264,18 @@ func (f *Flow) Initiate(r *http.Request, userID, methodID string) error {
 		return nil
 	}
 
-	att := f.loadAttempt(r, user.Id)
+	att := f.loadAttempt(r, user.ID)
 	_, next, err := f.Policy.Next(user, att.Satisfied)
 	if err != nil {
 		return err
 	}
 	if !contains(next, methodID) {
-		f.logger().Debug("login: initiation for method not offered", "userID", user.Id, "method", methodID)
+		f.logger().Debug("login: initiation for method not offered", "userID", user.ID, "method", methodID)
 		return nil
 	}
 
 	if err := init.Initiate(r.Context(), user); err != nil {
-		f.logger().Error("login: initiation failed", "userID", user.Id, "method", methodID, "error", err)
+		f.logger().Error("login: initiation failed", "userID", user.ID, "method", methodID, "error", err)
 	}
 	return nil
 }

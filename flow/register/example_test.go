@@ -24,6 +24,10 @@ func (exampleUsers) GetUser(string) (userauth.User, error) {
 	return userauth.User{}, userauth.ErrUserNotFound
 }
 
+func (exampleUsers) GetUserByLogin(string) (userauth.User, error) {
+	return userauth.User{}, userauth.ErrUserNotFound
+}
+
 // exampleCreator stands in for the final user store write; a real
 // application adapts userdb.Store.CreateUserWithHashedPassword.
 type exampleCreator struct{}

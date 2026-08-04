@@ -17,7 +17,8 @@ func TestUserFromFile(t *testing.T) {
 			name:   "get demo user",
 			userId: "demo",
 			expect: userauth.User{
-				Id:      "demo",
+				ID:      "demo",
+				LoginID: "demo",
 				HashPw:  "demo",
 				Enabled: true,
 			},
@@ -193,7 +194,8 @@ func TestGetUser_Email2FA(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := userauth.User{
-		Id:           "alice",
+		ID:           "alice",
+		LoginID:      "alice",
 		HashPw:       "alice",
 		Enabled:      true,
 		PrimaryEmail: "alice@example.com",

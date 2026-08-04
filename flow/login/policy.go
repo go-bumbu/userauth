@@ -85,7 +85,7 @@ func SecondFactorAfter(first string, provider userauth.SecondFactorProvider) Pol
 		if provider == nil {
 			return true, nil, nil
 		}
-		available, err := provider.AvailableSecondFactors(user.Id)
+		available, err := provider.AvailableSecondFactors(user.ID)
 		if err != nil {
 			return false, nil, err
 		}

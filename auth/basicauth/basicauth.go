@@ -80,7 +80,7 @@ func (auth *AuthHandler) handleAuth(w http.ResponseWriter, r *http.Request) (log
 // user, wrong password and a malformed stored hash are all credential failures
 // (false, nil); an error is an internal store failure.
 func (auth *AuthHandler) verify(username, password string) (bool, error) {
-	user, err := auth.users.GetUser(username)
+	user, err := auth.users.GetUserByLogin(username)
 	if err != nil {
 		if errors.Is(err, userauth.ErrUserNotFound) || errors.Is(err, userauth.ErrUserDisabled) {
 			return false, nil

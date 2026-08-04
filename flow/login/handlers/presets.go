@@ -61,7 +61,7 @@ func passwordTOTPPolicy(cfg PasswordTOTPCfg) login.Policy {
 		if cfg.TOTP == nil {
 			return true, nil, nil
 		}
-		data, err := cfg.TOTP.GetTOTP(user.Id)
+		data, err := cfg.TOTP.GetTOTP(user.ID)
 		if err != nil {
 			return false, nil, err
 		}

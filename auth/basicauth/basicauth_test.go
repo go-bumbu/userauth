@@ -24,10 +24,15 @@ func (st dummyUser) GetUser(id string) (userauth.User, error) {
 		st.pass = hashutil.MustHashPassword("admin")
 	}
 	return userauth.User{
-		Id:      st.user,
+		ID:      st.user,
+		LoginID: st.user,
 		HashPw:  st.pass,
 		Enabled: true,
 	}, nil
+}
+
+func (st dummyUser) GetUserByLogin(loginID string) (userauth.User, error) {
+	return st.GetUser(loginID)
 }
 
 func dummyHandler() http.Handler {

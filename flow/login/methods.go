@@ -42,7 +42,7 @@ type Initiator interface {
 
 // PasswordMethod verifies the stored password hash. It reuses the same user
 // lookup as the engine; the engine has already established that the user
-// exists and is enabled.
+// exists and is enabled, and hands over the canonical user ID.
 type PasswordMethod struct {
 	Users userauth.UserGetter
 }
@@ -114,6 +114,10 @@ type CodeMethod struct {
 	Verifier verificationcode.CodeVerifier
 	Issuer   CodeIssuer
 	Deliver  verificationcode.Deliverer
+	// Recipient resolves the delivery address for a user (e.g. a phone number
+	// for SMS). When nil, the primary email is used, falling back to the login
+	// ID for stores that keep the address there.
+	Recipient func(userauth.User) string
 }
 
 func (m CodeMethod) ID() string { return m.MethodID }
@@ -123,13 +127,24 @@ func (m CodeMethod) Verify(userID, input string) (bool, error) {
 }
 
 // Initiate generates, stores and delivers a fresh code. It implements
-// Initiator; the engine only calls it for known, enabled users.
+// Initiator; the engine only calls it for known, enabled users. The code is
+// keyed by the canonical user ID; delivery goes to the resolved recipient.
 func (m CodeMethod) Initiate(ctx context.Context, user userauth.User) error {
-	code, expiresAt, err := m.Issuer.Generate(user.Id)
+	code, expiresAt, err := m.Issuer.Generate(user.ID)
 	if err != nil {
 		return err
 	}
-	return m.Deliver.Deliver(ctx, user.Id, code, expiresAt)
+	return m.Deliver.Deliver(ctx, m.recipient(user), code, expiresAt)
+}
+
+func (m CodeMethod) recipient(user userauth.User) string {
+	if m.Recipient != nil {
+		return m.Recipient(user)
+	}
+	if user.PrimaryEmail != "" {
+		return user.PrimaryEmail
+	}
+	return user.LoginID
 }
 
 // EmailCodeMethod wires a CodeMethod for the common email case, using the

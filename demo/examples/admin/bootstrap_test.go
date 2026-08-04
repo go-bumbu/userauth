@@ -5,11 +5,28 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/go-bumbu/userauth/demo/internal/demotest"
 )
+
+// deletePath extracts the delete-form action for the row of the given login
+// ID from the rendered user list. Actions carry the canonical user ID, which
+// the test cannot know upfront.
+func deletePath(t *testing.T, handler http.Handler, login string) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	re := regexp.MustCompile(`<td>` + regexp.QuoteMeta(login) + `</td>(?s:.*?)action="/bootstrap/([^/]+)/delete"`)
+	m := re.FindStringSubmatch(w.Body.String())
+	if m == nil {
+		t.Fatalf("no delete action found for user %q; body=%q", login, w.Body.String())
+	}
+	return "/" + m[1] + "/delete"
+}
 
 // getStatus fetches /status and returns the needsSetup flag.
 func getStatus(t *testing.T, handler http.Handler) bool {
@@ -48,7 +65,7 @@ func TestBootstrapScenario(t *testing.T) {
 	}
 
 	// delete the original admin
-	w = demotest.PostForm(handler, "/admin/delete", url.Values{}, nil)
+	w = demotest.PostForm(handler, deletePath(t, handler, "admin"), url.Values{}, nil)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Deleted user admin") {
 		t.Fatalf("delete admin: code=%d body=%q", w.Code, w.Body.String())
 	}
@@ -66,7 +83,7 @@ func TestBootstrapScenario(t *testing.T) {
 	}
 
 	// delete the last user: store is empty, setup is needed again
-	w = demotest.PostForm(handler, "/admin2/delete", url.Values{}, nil)
+	w = demotest.PostForm(handler, deletePath(t, handler, "admin2"), url.Values{}, nil)
 	if !strings.Contains(w.Body.String(), "Deleted user admin2") {
 		t.Fatalf("delete admin2: body=%q", w.Body.String())
 	}

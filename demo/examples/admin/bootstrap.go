@@ -66,7 +66,7 @@ func (a *bootstrapApp) page(w http.ResponseWriter, r *http.Request, msg string) 
 	}
 	rows := make([]userRow, 0, len(res.Users))
 	for _, u := range res.Users {
-		rows = append(rows, userRow{ID: u.Id, Enabled: u.Enabled})
+		rows = append(rows, userRow{ID: u.ID, LoginID: u.LoginID, Enabled: u.Enabled})
 	}
 	a.rnd.Render(w, r, "bootstrap.tmpl.html", map[string]any{
 		"Users": rows,
@@ -104,14 +104,20 @@ func (a *bootstrapApp) create(w http.ResponseWriter, r *http.Request) {
 	a.page(w, r, "Created user "+login+".")
 }
 
-// delete removes a user; deleting the last one makes the store bootstrappable again.
+// delete removes a user; deleting the last one makes the store bootstrappable
+// again. The URL carries the canonical ID; the banner shows the login ID.
 func (a *bootstrapApp) delete(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
+	usr, err := a.users.GetUser(id)
+	if err != nil {
+		a.page(w, r, "Error: "+err.Error())
+		return
+	}
 	if err := a.users.Delete(id); err != nil {
 		a.page(w, r, "Error: "+err.Error())
 		return
 	}
-	a.page(w, r, "Deleted user "+id+".")
+	a.page(w, r, "Deleted user "+usr.LoginID+".")
 }
 
 // status is the first-run check an SPA would call to decide whether to show

@@ -45,7 +45,12 @@ func TestProfileLoginTwoStepTOTP(t *testing.T) {
 	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	if err := users.SetTOTP(uid, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
+	// 2FA enrolment keys on the canonical user ID, not the login ID
+	usr, err := users.GetUserByLogin(uid)
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if err := users.SetTOTP(usr.ID, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
 		t.Fatalf("set totp: %v", err)
 	}
 
@@ -87,7 +92,11 @@ func TestProfileLoginTwoStepWrongCode(t *testing.T) {
 	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	if err := users.SetTOTP(uid, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
+	usr, err := users.GetUserByLogin(uid)
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if err := users.SetTOTP(usr.ID, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
 		t.Fatalf("set totp: %v", err)
 	}
 	// establish the pending login (password step)
