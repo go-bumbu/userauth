@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/go-bumbu/userauth/auth"
+	"github.com/go-bumbu/userauth/auth/chain"
 )
 
 type HeaderHandler struct {
@@ -60,7 +60,7 @@ func (auth *HeaderHandler) handleAuth(w http.ResponseWriter, r *http.Request) (a
 	return
 }
 
-var _ auth.AuthHandler = (*HeaderHandler)(nil)
+var _ chain.AuthHandler = (*HeaderHandler)(nil)
 
 func (auth *HeaderHandler) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

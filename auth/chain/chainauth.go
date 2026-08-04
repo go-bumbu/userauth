@@ -5,13 +5,13 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-
-	"github.com/go-bumbu/userauth/auth"
 )
 
-// AuthHandler is an alias for auth.AuthHandler so existing consumers
-// that reference chain.AuthHandler continue to compile.
-type AuthHandler = auth.AuthHandler
+// AuthHandler is implemented by session and other auth backends for use with chain authenticator.
+type AuthHandler interface {
+	Name() string
+	HandleAuth(w http.ResponseWriter, r *http.Request) (allowAccess, stopEvaluation bool)
+}
 
 type callback func(w http.ResponseWriter, r *http.Request)
 
