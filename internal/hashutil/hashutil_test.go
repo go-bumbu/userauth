@@ -205,3 +205,30 @@ func TestGenerateNumericCode(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerateBase62(t *testing.T) {
+	const base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	for _, length := range []int{1, 8, 43} {
+		s, err := GenerateBase62(length)
+		if err != nil {
+			t.Fatalf("GenerateBase62(%d): %v", length, err)
+		}
+		if len(s) != length {
+			t.Errorf("GenerateBase62(%d) length = %d", length, len(s))
+		}
+		for _, c := range s {
+			if !strings.ContainsRune(base62, c) {
+				t.Errorf("GenerateBase62(%d) contains non-base62 char %q", length, c)
+			}
+		}
+	}
+	// two calls must not collide (43 chars ≈ 256 bits of entropy)
+	a, _ := GenerateBase62(43)
+	b, _ := GenerateBase62(43)
+	if a == b {
+		t.Error("two GenerateBase62(43) calls returned the same string")
+	}
+	if _, err := GenerateBase62(0); err == nil {
+		t.Error("GenerateBase62(0) should error")
+	}
+}

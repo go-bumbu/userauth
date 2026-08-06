@@ -165,3 +165,23 @@ func GenerateNumericCode(length int) (string, error) {
 	}
 	return string(b), nil
 }
+
+// base62Charset is used for token IDs and secrets (case-sensitive alphanumeric).
+const base62Charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+// GenerateBase62 returns a cryptographically random base62 string of the given length.
+func GenerateBase62(length int) (string, error) {
+	if length <= 0 {
+		return "", fmt.Errorf("GenerateBase62: length must be positive, got %d", length)
+	}
+	b := make([]byte, length)
+	charsetLen := big.NewInt(int64(len(base62Charset)))
+	for i := range b {
+		n, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			return "", fmt.Errorf("generate base62: %w", err)
+		}
+		b[i] = base62Charset[n.Int64()]
+	}
+	return string(b), nil
+}
