@@ -17,6 +17,8 @@ import (
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/flow/login"
 	flowmemory "github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
+	"github.com/go-bumbu/userauth/flow/pat/handlers"
+	patsvc "github.com/go-bumbu/userauth/service/pat"
 	"github.com/go-bumbu/userauth/userstore/userdb"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
@@ -30,6 +32,7 @@ type app struct {
 	rnd     *web.Renderer
 	sessMgr *cookieauth.Manager
 	flow    *login.Flow
+	pats    *patsvc.Service
 }
 
 // New demonstrates an authenticated self-service area backed by the
@@ -72,6 +75,11 @@ func New(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Handler 
 		return false, []string{login.MethodTOTP, login.MethodRecovery}, nil
 	})
 
+	pats, err := patsvc.NewService(users.PATStore(), users, patsvc.Opts{Logger: log})
+	if err != nil {
+		panic(fmt.Errorf("profile: error creating PAT service: %v", err))
+	}
+
 	a := &app{
 		log:     log,
 		users:   users,
@@ -89,6 +97,7 @@ func New(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Handler 
 			Session:  sessMgr,
 			Logger:   log,
 		},
+		pats: pats,
 	}
 
 	r := mux.NewRouter()
@@ -105,6 +114,14 @@ func New(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Handler 
 	r.Path("/totp/qr.png").Methods(http.MethodGet).Handler(a.requireAuth(http.HandlerFunc(a.totpQR)))
 	r.Path("/totp/confirm").Methods(http.MethodPost).Handler(a.requireAuth(http.HandlerFunc(a.totpConfirm)))
 	r.Path("/totp/disable").Methods(http.MethodPost).Handler(a.requireAuth(http.HandlerFunc(a.totpDisable)))
+	r.Path("/pat").Methods(http.MethodGet).Handler(a.requireAuth(http.HandlerFunc(a.patView)))
+	r.Path("/pat/create").Methods(http.MethodPost).Handler(a.requireAuth(http.HandlerFunc(a.patCreate)))
+	r.Path("/pat/revoke").Methods(http.MethodPost).Handler(a.requireAuth(http.HandlerFunc(a.patRevoke)))
+	// JSON API for the same operations, e.g. for curl; same session auth
+	patAPI := handlers.New(handlers.Cfg{Service: pats, Logger: log})
+	r.Path("/pat/api").Methods(http.MethodPost).Handler(a.requireAuth(patAPI.CreateHandler()))
+	r.Path("/pat/api").Methods(http.MethodGet).Handler(a.requireAuth(patAPI.ListHandler()))
+	r.PathPrefix("/pat/api/").Methods(http.MethodDelete).Handler(a.requireAuth(patAPI.DeleteHandler()))
 	return r
 }
 

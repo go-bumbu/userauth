@@ -28,12 +28,14 @@ func Section(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) examples.
 					"Logged-in users can view their account details, change their password, and update their email. " +
 						"Pre-populated accounts: <code>admin@example.com</code> / <code>admin</code> and " +
 						"<code>demo@example.com</code> / <code>demo</code> — or register your own on the Registration tab. " +
-						"Accounts can also enable a TOTP authenticator as a second factor (with one-time recovery codes).",
+						"Accounts can also enable a TOTP authenticator as a second factor (with one-time recovery codes). " +
+						"Users can also create personal access tokens for API access (Profile → personal access tokens).",
 				},
 				Links: []examples.Link{
 					{Href: "/profile/", Text: "/profile/", Desc: "view and edit your profile (redirects to login if not authenticated)"},
 					{Href: "/profile/login", Text: "/profile/login", Desc: "login with a database account (asks for TOTP when enrolled)"},
 					{Href: "/profile/logout", Text: "/profile/logout", Desc: "logout"},
+					{Href: "/profile/pat", Text: "/profile/pat", Desc: "create and revoke personal access tokens"},
 				},
 				Mount: func(r *mux.Router) {
 					r.PathPrefix("/profile/").Handler(http.StripPrefix("/profile", New(log, users, rnd)))

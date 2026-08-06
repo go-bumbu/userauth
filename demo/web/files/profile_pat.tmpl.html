@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Personal Access Tokens</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h2>Personal access tokens</h2>
+{{if .Success}}<p class="success">{{.Success}}</p>{{end}}
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+{{if .NewToken}}
+  <div class="token-once">
+    <strong>Your new token:</strong>
+    <code>{{.NewToken}}</code>
+  </div>
+{{end}}
+
+<h3>Create token</h3>
+<form method="post" action="/profile/pat/create">
+  <label>Name <input type="text" name="name" required></label>
+  <label>Expires in (days, empty = never) <input type="number" name="expiry_days" min="1"></label>
+  <label>Scopes (comma-separated, optional) <input type="text" name="scopes"></label>
+  <button type="submit">Create</button>
+</form>
+
+<h3>Your tokens</h3>
+{{if .Tokens}}
+<table>
+  <tr><th>ID</th><th>Name</th><th>Scopes</th><th>Expires</th><th>Last used</th><th>Created</th><th></th></tr>
+  {{range .Tokens}}
+  <tr>
+    <td><code>{{.TokenID}}</code></td>
+    <td>{{.Name}}</td>
+    <td>{{.Scopes}}</td>
+    <td>{{.Expires}}</td>
+    <td>{{.LastUsed}}</td>
+    <td>{{.Created}}</td>
+    <td>
+      <form method="post" action="/profile/pat/revoke">
+        <input type="hidden" name="token_id" value="{{.TokenID}}">
+        <button type="submit">Revoke</button>
+      </form>
+    </td>
+  </tr>
+  {{end}}
+</table>
+{{else}}
+<p>No tokens yet.</p>
+{{end}}
+<p><a href="/profile/">Back to profile</a></p>
+</body>
+</html>

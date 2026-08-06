@@ -81,6 +81,20 @@ func Section(log *slog.Logger, users userauth.UserGetter, rnd *web.Renderer) exa
 					r.PathPrefix("/chain/").Handler(http.StripPrefix("/chain", Chain(log, users, rnd)))
 				},
 			},
+			{
+				Title: "Personal access token",
+				Info: []template.HTML{
+					"Authenticates API requests from a bearer token minted for a user.",
+					`Get a token at <a href="/token/new">/token/new</a>, then: <code>curl -H "Authorization: Bearer &lt;token&gt;" http://localhost:8085/token/protected</code>`,
+				},
+				Links: []examples.Link{
+					{Href: "/token/new", Text: "/token/new", Desc: "mint a demo token for user 'demo' (demo only, no credential check)"},
+					{Href: "/token/protected", Text: "/token/protected", Desc: "token-protected endpoint (401 in the browser — use curl with the token)"},
+				},
+				Mount: func(r *mux.Router) {
+					r.PathPrefix("/token/").Handler(http.StripPrefix("/token", Token(log, users, rnd)))
+				},
+			},
 		},
 	}
 }
