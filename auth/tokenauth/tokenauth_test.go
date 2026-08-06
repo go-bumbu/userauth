@@ -43,6 +43,8 @@ func TestNewRequiresVerifier(t *testing.T) {
 
 func TestHandleAuthTruthTable(t *testing.T) {
 	good := fakeVerifier{valid: "pat_AAAAAAAA_secret", data: tokenauth.RequestData{UserID: "u1", Scopes: []string{"read"}}}
+	validToken := "pat_AAAAAAAA_secret"
+	whitespaceToken := "  " + validToken + "  "
 	tests := []struct {
 		name       string
 		cfg        tokenauth.Cfg
@@ -53,17 +55,19 @@ func TestHandleAuthTruthTable(t *testing.T) {
 	}{
 		{"no token falls through", tokenauth.Cfg{Verifier: good}, "", nil, false, false},
 		{"no token falls through even when enforcing", tokenauth.Cfg{Verifier: good, Enforce: true}, "", nil, false, false},
-		{"valid bearer token", tokenauth.Cfg{Verifier: good}, "Bearer pat_AAAAAAAA_secret", nil, true, false},
-		{"bearer scheme is case-insensitive", tokenauth.Cfg{Verifier: good}, "bearer pat_AAAAAAAA_secret", nil, true, false},
+		{"valid bearer token", tokenauth.Cfg{Verifier: good}, "Bearer " + validToken, nil, true, false},
+		{"bearer scheme is case-insensitive", tokenauth.Cfg{Verifier: good}, "bearer " + validToken, nil, true, false},
 		{"invalid token no enforce", tokenauth.Cfg{Verifier: good}, "Bearer wrong", nil, false, false},
 		{"invalid token with enforce stops", tokenauth.Cfg{Verifier: good, Enforce: true}, "Bearer wrong", nil, false, true},
 		{"basic auth header falls through untouched", tokenauth.Cfg{Verifier: good, Enforce: true}, "Basic dXNlcjpwdw==", nil, false, false},
 		{"custom header accepted", tokenauth.Cfg{Verifier: good, CustomHeader: "X-Api-Token"},
-			"", map[string]string{"X-Api-Token": "pat_AAAAAAAA_secret"}, true, false},
+			"", map[string]string{"X-Api-Token": validToken}, true, false},
+		{"custom header trims whitespace", tokenauth.Cfg{Verifier: good, CustomHeader: "X-Api-Token"},
+			"", map[string]string{"X-Api-Token": whitespaceToken}, true, false},
 		{"authorization beats custom header", tokenauth.Cfg{Verifier: good, CustomHeader: "X-Api-Token"},
-			"Bearer wrong", map[string]string{"X-Api-Token": "pat_AAAAAAAA_secret"}, false, false},
+			"Bearer wrong", map[string]string{"X-Api-Token": validToken}, false, false},
 		{"custom scheme", tokenauth.Cfg{Verifier: good, BearerScheme: "Token"},
-			"Token pat_AAAAAAAA_secret", nil, true, false},
+			"Token " + validToken, nil, true, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

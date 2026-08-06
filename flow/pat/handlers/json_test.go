@@ -201,3 +201,32 @@ func TestPresetDefaultUserID(t *testing.T) {
 		t.Error("New with nil UserID should use default")
 	}
 }
+
+func TestMethodEnforcement(t *testing.T) {
+	h, _ := newFixture(t)
+	tests := []struct {
+		name    string
+		handler http.Handler
+		method  string
+		path    string
+		want    int
+	}{
+		{"CreateHandler rejects GET", h.CreateHandler(), http.MethodGet, "/", http.StatusMethodNotAllowed},
+		{"CreateHandler rejects PUT", h.CreateHandler(), http.MethodPut, "/", http.StatusMethodNotAllowed},
+		{"CreateHandler accepts POST", h.CreateHandler(), http.MethodPost, "/", http.StatusBadRequest}, // 400 for bad body, not 405
+		{"ListHandler rejects POST", h.ListHandler(), http.MethodPost, "/", http.StatusMethodNotAllowed},
+		{"ListHandler rejects DELETE", h.ListHandler(), http.MethodDelete, "/", http.StatusMethodNotAllowed},
+		{"ListHandler accepts GET", h.ListHandler(), http.MethodGet, "/", http.StatusOK},
+		{"DeleteHandler rejects GET", h.DeleteHandler(), http.MethodGet, "/abc", http.StatusMethodNotAllowed},
+		{"DeleteHandler rejects POST", h.DeleteHandler(), http.MethodPost, "/abc", http.StatusMethodNotAllowed},
+		{"DeleteHandler accepts DELETE", h.DeleteHandler(), http.MethodDelete, "/abc", http.StatusNotFound}, // 404 for token not found, not 405
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w := doJSON(t, tc.handler, tc.method, tc.path, "u1", nil)
+			if w.Code != tc.want {
+				t.Errorf("status = %d, want %d (%s)", w.Code, tc.want, w.Body.String())
+			}
+		})
+	}
+}

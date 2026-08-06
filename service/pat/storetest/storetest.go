@@ -133,4 +133,45 @@ func Run(t *testing.T, newStore func(t *testing.T) pat.TokenStore) {
 			t.Errorf("LastUsedAt = %v, want %v", got.LastUsedAt, when)
 		}
 	})
+
+	t.Run("touch on absent token returns ErrTokenNotFound", func(t *testing.T) {
+		s := newStore(t)
+		if err := s.Touch("absent", now); err != pat.ErrTokenNotFound {
+			t.Errorf("want ErrTokenNotFound, got %v", err)
+		}
+	})
+
+	t.Run("insert without expiry", func(t *testing.T) {
+		s := newStore(t)
+		in := rec("noexp", "user1")
+		in.ExpiresAt = nil
+		if err := s.Insert(in); err != nil {
+			t.Fatalf("Insert: %v", err)
+		}
+		got, err := s.GetByTokenID("noexp")
+		if err != nil {
+			t.Fatalf("GetByTokenID: %v", err)
+		}
+		if got.ExpiresAt != nil {
+			t.Errorf("ExpiresAt should be nil, got %v", got.ExpiresAt)
+		}
+	})
+
+	t.Run("insert and list multiple users", func(t *testing.T) {
+		s := newStore(t)
+		for _, userID := range []string{"user1", "user2", "user3"} {
+			if err := s.Insert(rec("tok_"+userID, userID)); err != nil {
+				t.Fatalf("Insert %s: %v", userID, err)
+			}
+		}
+		for _, userID := range []string{"user1", "user2", "user3"} {
+			got, err := s.ListByUser(userID)
+			if err != nil {
+				t.Errorf("ListByUser(%s): %v", userID, err)
+			}
+			if len(got) != 1 {
+				t.Errorf("ListByUser(%s): want 1 token, got %d", userID, len(got))
+			}
+		}
+	})
 }

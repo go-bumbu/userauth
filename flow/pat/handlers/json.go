@@ -72,9 +72,14 @@ func toMeta(rec patsvc.TokenRecord) TokenMeta {
 //   - 201 CreateResponse — the "token" field appears here and never again
 //   - 400 for invalid name/expiry, over-limit, malformed body
 //   - 401 when the request has no authenticated user
+//   - 405 for non-POST requests
 //   - 500 for store failures
 func (h *JSON) CreateHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
 		var p CreatePayload
 		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 			h.writeError(w, http.StatusBadRequest, "invalid request body")
@@ -90,8 +95,18 @@ func (h *JSON) CreateHandler() http.Handler {
 }
 
 // ListHandler returns the GET endpoint listing the user's tokens (metadata only).
+//
+// Responses:
+//   - 200 ListResponse with token metadata
+//   - 401 when the request has no authenticated user
+//   - 405 for non-GET requests
+//   - 500 for store failures
 func (h *JSON) ListHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
 		recs, err := h.Flow.List(r)
 		if err != nil {
 			h.writeFlowError(w, err)
@@ -108,8 +123,20 @@ func (h *JSON) ListHandler() http.Handler {
 // DeleteHandler returns the DELETE endpoint revoking one token. The token ID
 // is the last path segment, so it works with any router (net/http patterns,
 // gorilla/mux, plain StripPrefix mounts).
+//
+// Responses:
+//   - 204 on successful revocation
+//   - 400 for missing/invalid token ID
+//   - 401 when the request has no authenticated user
+//   - 404 when token not found or not owned by the user
+//   - 405 for non-DELETE requests
+//   - 500 for store failures
 func (h *JSON) DeleteHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
 		tokenID := path.Base(r.URL.Path)
 		if tokenID == "" || tokenID == "/" || tokenID == "." {
 			h.writeError(w, http.StatusBadRequest, "token id is required")

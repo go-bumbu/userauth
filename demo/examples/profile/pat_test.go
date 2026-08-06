@@ -87,7 +87,7 @@ func TestProfilePATRevoke(t *testing.T) {
 
 	// Extract token_id from the page (it's in a hidden input or table cell)
 	// The template shows it in <code>{{.TokenID}}</code> in the table
-	tokenIDRe := regexp.MustCompile(`<code>([^<]+)</code>`)
+	tokenIDRe := regexp.MustCompile(`<code[^>]*>([^<]+)</code>`)
 	matches := tokenIDRe.FindAllStringSubmatch(body, -1)
 	if len(matches) < 2 {
 		t.Fatalf("expected at least 2 code blocks (plaintext + tokenID), got %d", len(matches))

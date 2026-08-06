@@ -20,12 +20,12 @@ type patStore struct{ s Store }
 
 var _ pat.TokenStore = patStore{}
 
-func (p patStore) Insert(rec pat.TokenRecord) error               { return p.s.InsertPAT(rec) }
+func (p patStore) Insert(rec pat.TokenRecord) error                { return p.s.InsertPAT(rec) }
 func (p patStore) GetByTokenID(id string) (pat.TokenRecord, error) { return p.s.GetPATByTokenID(id) }
 func (p patStore) ListByUser(userID string) ([]pat.TokenRecord, error) {
 	return p.s.ListPATsByUser(userID)
 }
-func (p patStore) Delete(userID, tokenID string) error { return p.s.DeletePAT(userID, tokenID) }
+func (p patStore) Delete(userID, tokenID string) error     { return p.s.DeletePAT(userID, tokenID) }
 func (p patStore) Touch(tokenID string, t time.Time) error { return p.s.TouchPAT(tokenID, t) }
 
 // InsertPAT stores a new token record; TokenID must be unique.

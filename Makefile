@@ -27,8 +27,8 @@ verify: test license-check lint benchmark coverage ## run all tests
 COVERAGE_THRESHOLD ?= 80
 
 .PHONY: coverage
-coverage: ## check code coverage per package (demo excluded)
-	@out=$$(go test -cover -covermode=atomic $$(go list ./... | grep -v '/demo')) || { echo "$$out"; exit 1; }; \
+coverage: ## check code coverage per package (demo and test utilities excluded)
+	@out=$$(go test -cover -covermode=atomic $$(go list ./... | grep -v '/demo' | grep -v '/storetest')) || { echo "$$out"; exit 1; }; \
 	echo "$$out" | awk -v threshold=$(COVERAGE_THRESHOLD) ' \
 		/\[no test files\]/ { printf "⚠️  %-70s no test files\n", $$2; next } \
 		/coverage:/ { \

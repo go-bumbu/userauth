@@ -131,7 +131,7 @@ func (h *Handler) extractToken(r *http.Request) (string, bool) {
 		// wrong scheme or empty credentials: not a token for us
 	}
 	if h.customHeader != "" {
-		if v := r.Header.Get(h.customHeader); v != "" {
+		if v := strings.TrimSpace(r.Header.Get(h.customHeader)); v != "" {
 			return v, true
 		}
 	}

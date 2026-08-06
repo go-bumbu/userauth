@@ -84,12 +84,13 @@ func Section(log *slog.Logger, users userauth.UserGetter, rnd *web.Renderer) exa
 			{
 				Title: "Personal access token",
 				Info: []template.HTML{
-					"Authenticates API requests from a bearer token minted for a user.",
+					"Authenticates requests via PAT token, cookie session, or basic auth — a chain where all methods coexist.",
 					`Get a token at <a href="/token/new">/token/new</a>, then: <code>curl -H "Authorization: Bearer &lt;token&gt;" http://localhost:8085/token/protected</code>`,
+					"The protected endpoint also accepts cookie session (browsers) and basic auth (demo:demo).",
 				},
 				Links: []examples.Link{
 					{Href: "/token/new", Text: "/token/new", Desc: "mint a demo token for user 'demo' (demo only, no credential check)"},
-					{Href: "/token/protected", Text: "/token/protected", Desc: "token-protected endpoint (401 in the browser — use curl with the token)"},
+					{Href: "/token/protected", Text: "/token/protected", Desc: "chain-protected endpoint (token, cookie, or basic auth)"},
 				},
 				Mount: func(r *mux.Router) {
 					r.PathPrefix("/token/").Handler(http.StripPrefix("/token", Token(log, users, rnd)))
