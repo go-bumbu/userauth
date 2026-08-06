@@ -11,6 +11,7 @@ import (
 )
 
 // Run exercises the TokenStore contract against a fresh store per subtest.
+//
 //nolint:gocyclo // Conformance suite with multiple test scenarios is inherently complex
 func Run(t *testing.T, newStore func(t *testing.T) pat.TokenStore) {
 	t.Helper()
