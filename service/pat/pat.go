@@ -7,8 +7,13 @@ package pat
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/internal/hashutil"
 )
 
 // TokenRecord is what the store persists. All fields are opaque to the store:
@@ -75,4 +80,136 @@ func parseToken(prefix, presented string) (tokenID, secret string, ok bool) {
 		return "", "", false
 	}
 	return tokenID, secret, true
+}
+
+const (
+	defaultPrefix        = "pat"
+	defaultMaxPerUser    = 25
+	defaultTouchInterval = time.Hour
+	tokenIDLength        = 8
+	secretLength         = 43 // ~256 bits of base62
+	maxNameLength        = 100
+)
+
+// TokenInfo is the identity a verified token asserts.
+type TokenInfo struct {
+	UserID  string
+	LoginID string
+	TokenID string
+	Name    string
+	Scopes  []string
+}
+
+// Service owns token policy: generation, hashing, expiry, per-user limits,
+// and last-used tracking. Persistence is delegated to a TokenStore; user
+// lookup (enabled check at verify time) to a userauth.UserGetter.
+type Service struct {
+	store         TokenStore
+	users         userauth.UserGetter
+	prefix        string
+	maxPerUser    int // -1 = unlimited
+	touchInterval time.Duration
+	logger        *slog.Logger
+}
+
+// Opts configures a Service. Zero values fall back to defaults.
+type Opts struct {
+	// Prefix is the first token segment; default "pat". A distinctive prefix
+	// (e.g. "myapp_pat") makes leaked tokens greppable by secret scanners.
+	Prefix string
+	// MaxPerUser limits tokens per user in Mint. 0 uses the default (25);
+	// a negative value means unlimited.
+	MaxPerUser int
+	// TouchInterval throttles LastUsedAt writes on Verify: the write is
+	// skipped while the stored value is younger than the interval. 0 uses
+	// the default (1h); a negative value disables the writes entirely.
+	TouchInterval time.Duration
+	Logger        *slog.Logger
+}
+
+// NewService wires the service to its store and user lookup.
+func NewService(store TokenStore, users userauth.UserGetter, opts Opts) (*Service, error) {
+	if store == nil {
+		return nil, fmt.Errorf("pat: store is required")
+	}
+	if users == nil {
+		return nil, fmt.Errorf("pat: users is required")
+	}
+	if opts.Prefix == "" {
+		opts.Prefix = defaultPrefix
+	}
+	if opts.MaxPerUser == 0 {
+		opts.MaxPerUser = defaultMaxPerUser
+	}
+	if opts.MaxPerUser < 0 {
+		opts.MaxPerUser = -1
+	}
+	if opts.TouchInterval == 0 {
+		opts.TouchInterval = defaultTouchInterval
+	}
+	if opts.Logger == nil {
+		opts.Logger = slog.New(slog.DiscardHandler)
+	}
+	return &Service{
+		store:         store,
+		users:         users,
+		prefix:        opts.Prefix,
+		maxPerUser:    opts.MaxPerUser,
+		touchInterval: opts.TouchInterval,
+		logger:        opts.Logger,
+	}, nil
+}
+
+// Mint creates a token for the user and returns the full plaintext exactly
+// once; only the SHA-256 hash of the secret is stored. Errors:
+// ErrInvalidName, ErrInvalidExpiry, ErrTooManyTokens, or store failures.
+func (s *Service) Mint(userID, name string, scopes []string, expiresAt *time.Time) (string, TokenRecord, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || len([]rune(name)) > maxNameLength {
+		return "", TokenRecord{}, fmt.Errorf("%w: must be 1-%d characters", ErrInvalidName, maxNameLength)
+	}
+	if expiresAt != nil && expiresAt.Before(time.Now()) {
+		return "", TokenRecord{}, fmt.Errorf("%w: must be in the future", ErrInvalidExpiry)
+	}
+	if s.maxPerUser > 0 {
+		existing, err := s.store.ListByUser(userID)
+		if err != nil {
+			return "", TokenRecord{}, err
+		}
+		if len(existing) >= s.maxPerUser {
+			return "", TokenRecord{}, fmt.Errorf("%w: limit is %d", ErrTooManyTokens, s.maxPerUser)
+		}
+	}
+	tokenID, err := hashutil.GenerateBase62(tokenIDLength)
+	if err != nil {
+		return "", TokenRecord{}, err
+	}
+	secret, err := hashutil.GenerateBase62(secretLength)
+	if err != nil {
+		return "", TokenRecord{}, err
+	}
+	rec := TokenRecord{
+		TokenID:    tokenID,
+		UserID:     userID,
+		Name:       name,
+		SecretHash: hashutil.HashCodeSHA256(secret),
+		Scopes:     scopes,
+		ExpiresAt:  expiresAt,
+		CreatedAt:  time.Now().UTC(),
+	}
+	if err := s.store.Insert(rec); err != nil {
+		return "", TokenRecord{}, err
+	}
+	return buildToken(s.prefix, tokenID, secret), rec, nil
+}
+
+// List returns the user's token records, oldest first (metadata; SecretHash
+// is present but callers rendering responses must never serialize it).
+func (s *Service) List(userID string) ([]TokenRecord, error) {
+	return s.store.ListByUser(userID)
+}
+
+// Revoke deletes the user's token; ErrTokenNotFound for absent or foreign IDs.
+func (s *Service) Revoke(userID, tokenID string) error {
+	return s.store.Delete(userID, tokenID)
 }
