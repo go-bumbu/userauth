@@ -111,3 +111,21 @@ type pendingEmailChangeModel struct {
 }
 
 func (pendingEmailChangeModel) TableName() string { return "user_pending_email_changes" }
+
+// patModel stores one personal access token per row (user_pats table,
+// UserID = user UUID). SecretHash is the SHA-256 hex of the token's secret
+// part; the plaintext is never stored. Scopes is a JSON-encoded []string —
+// opaque to the library, interpreted only by the consuming application.
+type patModel struct {
+	ID         uint   `gorm:"primaryKey"`
+	TokenID    string `gorm:"uniqueIndex;not null"`
+	UserID     string `gorm:"index;not null"`
+	Name       string `gorm:"not null"`
+	SecretHash string `gorm:"not null"`
+	Scopes     string // JSON-encoded []string; empty when no scopes
+	ExpiresAt  *time.Time
+	LastUsedAt *time.Time
+	CreatedAt  time.Time
+}
+
+func (patModel) TableName() string { return "user_pats" }

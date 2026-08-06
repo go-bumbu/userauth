@@ -158,7 +158,7 @@ func (s Store) IsEmpty() (bool, error) {
 
 // Delete permanently removes a user and all associated data (group
 // memberships, TOTP config, recovery codes, verification codes, second-factor
-// flags, pending email changes), so the login ID can be reused.
+// flags, pending email changes, personal access tokens), so the login ID can be reused.
 // Returns userauth.ErrUserNotFound if the user does not exist.
 func (s Store) Delete(userID string) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
@@ -171,7 +171,7 @@ func (s Store) Delete(userID string) error {
 		}
 		for _, m := range []interface{}{
 			&groupModel{}, &totpModel{}, &recoveryCodeModel{}, &emailVerificationCodeModel{},
-			&smsVerificationCodeModel{}, &secondFactorFlagsModel{}, &pendingEmailChangeModel{},
+			&smsVerificationCodeModel{}, &secondFactorFlagsModel{}, &pendingEmailChangeModel{}, &patModel{},
 		} {
 			if err := tx.Where("user_id = ?", userID).Delete(m).Error; err != nil {
 				return err
