@@ -6,6 +6,7 @@
 package pat
 
 import (
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -212,4 +213,62 @@ func (s *Service) List(userID string) ([]TokenRecord, error) {
 // Revoke deletes the user's token; ErrTokenNotFound for absent or foreign IDs.
 func (s *Service) Revoke(userID, tokenID string) error {
 	return s.store.Delete(userID, tokenID)
+}
+
+// Verify checks a presented token and returns the identity it asserts.
+// ok=false covers every credential failure — malformed token, unknown ID,
+// wrong secret, expired, owner missing or disabled — indistinguishably;
+// err is only returned for store or user-store I/O failures. On success the
+// record's LastUsedAt is updated, throttled by TouchInterval; a failed touch
+// is logged and ignored (it must not fail an otherwise valid request).
+func (s *Service) Verify(presented string) (TokenInfo, bool, error) {
+	tokenID, secret, ok := parseToken(s.prefix, presented)
+	if !ok {
+		s.logger.Debug("pat verify: malformed token")
+		return TokenInfo{}, false, nil
+	}
+	rec, err := s.store.GetByTokenID(tokenID)
+	if err != nil {
+		if errors.Is(err, ErrTokenNotFound) {
+			s.logger.Debug("pat verify: unknown token id")
+			return TokenInfo{}, false, nil
+		}
+		return TokenInfo{}, false, err
+	}
+	digest := hashutil.HashCodeSHA256(secret)
+	if subtle.ConstantTimeCompare([]byte(digest), []byte(rec.SecretHash)) != 1 {
+		s.logger.Debug("pat verify: secret mismatch", "tokenID", tokenID)
+		return TokenInfo{}, false, nil
+	}
+	if rec.ExpiresAt != nil && rec.ExpiresAt.Before(time.Now()) {
+		s.logger.Debug("pat verify: token expired", "tokenID", tokenID)
+		return TokenInfo{}, false, nil
+	}
+	user, err := s.users.GetUser(rec.UserID)
+	if err != nil {
+		if errors.Is(err, userauth.ErrUserNotFound) || errors.Is(err, userauth.ErrUserDisabled) {
+			s.logger.Debug("pat verify: owner not found or disabled", "tokenID", tokenID)
+			return TokenInfo{}, false, nil
+		}
+		return TokenInfo{}, false, err
+	}
+	if !user.Enabled {
+		s.logger.Debug("pat verify: owner disabled", "tokenID", tokenID)
+		return TokenInfo{}, false, nil
+	}
+
+	if s.touchInterval >= 0 &&
+		(rec.LastUsedAt == nil || time.Since(*rec.LastUsedAt) >= s.touchInterval) {
+		if err := s.store.Touch(tokenID, time.Now().UTC()); err != nil {
+			s.logger.Warn("pat verify: failed to update last-used", "tokenID", tokenID, "err", err)
+		}
+	}
+
+	return TokenInfo{
+		UserID:  user.ID,
+		LoginID: user.LoginID,
+		TokenID: rec.TokenID,
+		Name:    rec.Name,
+		Scopes:  rec.Scopes,
+	}, true, nil
 }
