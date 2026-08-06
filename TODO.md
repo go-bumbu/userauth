@@ -108,5 +108,9 @@ Items identified during a full architecture review of the library.
 ### Missing Capabilities
 
 - [ ] Token-based auth (JWT / opaque tokens)
+- [ ] **Review tokenauth Enforce policy**
+  `auth/tokenauth` enforce only stops chain evaluation when a token is *presented* and invalid;
+  absent tokens always fall through (unlike headerauth, which stops on absence). Revisit whether
+  this asymmetry is right once real consumers exist (PAT design, 2026-08-06).
 - [ ] OAuth2 / OIDC provider support
 - [ ] Graceful bcrypt cost migration on login
