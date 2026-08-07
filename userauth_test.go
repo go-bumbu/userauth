@@ -1,9 +1,10 @@
 package userauth
 
 import (
-	"github.com/go-bumbu/userauth/internal/hashutil"
-	"github.com/google/go-cmp/cmp"
+	"errors"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestCheckHash(t *testing.T) {
@@ -21,7 +22,7 @@ func TestCheckHash(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 
-			got, err := hashutil.VerifyPassword(tc.in, tc.hash)
+			got, err := VerifyPassword(tc.in, tc.hash)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -48,12 +49,40 @@ func TestCheckHashErrs(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := hashutil.VerifyPassword(tc.in, tc.hash)
+			_, err := VerifyPassword(tc.in, tc.hash)
 
 			if diff := cmp.Diff(err.Error(), tc.err); diff != "" {
 				t.Errorf("unexpected error: \n%s", diff)
 			}
+			if !errors.Is(err, ErrUnknownAlgorithm) {
+				t.Errorf("expected error to match ErrUnknownAlgorithm")
+			}
 		})
+	}
+}
+
+func TestHashPasswordRoundTrip(t *testing.T) {
+	hash, err := HashPassword("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok, err := VerifyPassword("demo", hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Errorf("expected hashed password to verify")
+	}
+	ok, err = VerifyPassword("wrong", hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Errorf("expected wrong password to not verify")
+	}
+
+	if got := MustHashPassword("demo"); got == "" {
+		t.Errorf("expected MustHashPassword to return a hash")
 	}
 }
 

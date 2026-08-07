@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/auth/cookieauth"
 	"github.com/go-bumbu/userauth/demo/web"
 	loginflow "github.com/go-bumbu/userauth/flow/login"
@@ -16,7 +17,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 	"github.com/pquerna/otp/totp"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // totpBasePath is where the demo router mounts this example; see basePath for
@@ -39,7 +39,7 @@ type totpLoginApp struct {
 // currently valid code (simulating the user's authenticator app).
 func TOTP(log *slog.Logger, rnd *web.Renderer) http.Handler {
 	users := &staticusers.Users{Users: []staticusers.User{
-		{Id: "demo", HashPw: mustHashPw("demo"), Enabled: true, TOTPSecret: demoTOTPSecret},
+		{Id: "demo", HashPw: userauth.MustHashPassword("demo"), Enabled: true, TOTPSecret: demoTOTPSecret},
 	}}
 
 	sesStore, err := cookieauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
@@ -152,14 +152,4 @@ func (a *totpLoginApp) renderVerify(w http.ResponseWriter, r *http.Request, user
 		data["Error"] = errMsg
 	}
 	a.rnd.Render(w, r, "totp_verify.tmpl.html", data)
-}
-
-// mustHashPw bcrypt-hashes a demo password for the examples that embed their
-// own static user; the static store holds hashes only.
-func mustHashPw(pw string) string {
-	h, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.MinCost)
-	if err != nil {
-		panic(err)
-	}
-	return string(h)
 }

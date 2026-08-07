@@ -22,7 +22,6 @@ import (
 	"github.com/go-bumbu/userauth/userstore/userdb"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // app holds the dependencies shared by the profile handlers.
@@ -167,8 +166,8 @@ func (a *app) viewWithMsg(w http.ResponseWriter, r *http.Request, success, errMs
 }
 
 // changePassword verifies the current password and replaces the stored hash.
-// The demo hashes with bcrypt directly, as any consumer of the library would;
-// userdb.SetPasswordHash stores the hash as-is.
+// The demo hashes via the public userauth helpers, as any consumer of the
+// library would; userdb.SetPasswordHash stores the hash as-is.
 func (a *app) changePassword(w http.ResponseWriter, r *http.Request) {
 	ud, err := cookieauth.CtxGetUserData(r)
 	if err != nil {
@@ -194,17 +193,17 @@ func (a *app) changePassword(w http.ResponseWriter, r *http.Request) {
 		a.viewWithMsg(w, r, "", "Could not load user.")
 		return
 	}
-	if bcrypt.CompareHashAndPassword([]byte(user.HashPw), []byte(current)) != nil {
+	if ok, err := userauth.VerifyPassword(current, user.HashPw); err != nil || !ok {
 		a.viewWithMsg(w, r, "", "Current password is incorrect.")
 		return
 	}
 
-	hashed, err := bcrypt.GenerateFromPassword([]byte(newPw), bcrypt.DefaultCost)
+	hashed, err := userauth.HashPassword(newPw)
 	if err != nil {
 		a.viewWithMsg(w, r, "", "Could not hash password.")
 		return
 	}
-	if err := a.users.SetPasswordHash(ud.UserId, string(hashed)); err != nil {
+	if err := a.users.SetPasswordHash(ud.UserId, hashed); err != nil {
 		a.viewWithMsg(w, r, "", "Could not update password: "+err.Error())
 		return
 	}

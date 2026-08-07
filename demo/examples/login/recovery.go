@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/auth/cookieauth"
 	"github.com/go-bumbu/userauth/demo/web"
 	loginflow "github.com/go-bumbu/userauth/flow/login"
@@ -68,7 +69,7 @@ type recoveryLoginApp struct {
 func Recovery(log *slog.Logger, rnd *web.Renderer) http.Handler {
 	users := &recoveryStore{
 		Users: staticusers.Users{Users: []staticusers.User{
-			{Id: "demo", HashPw: mustHashPw("demo"), Enabled: true},
+			{Id: "demo", HashPw: userauth.MustHashPassword("demo"), Enabled: true},
 		}},
 		codes: map[string][]string{
 			"demo": {"tqxm3k9d", "p7wf2rna", "z4hcy8sb"},

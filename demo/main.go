@@ -9,11 +9,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/router"
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 	"github.com/go-bumbu/userauth/userstore/userdb"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -27,8 +27,8 @@ func main() {
 	}
 
 	staticUsers := &staticusers.Users{Users: []staticusers.User{
-		{Id: "admin", HashPw: mustHashPw("admin"), Enabled: true},
-		{Id: "demo", HashPw: mustHashPw("demo"), Enabled: true},
+		{Id: "admin", HashPw: userauth.MustHashPassword("admin"), Enabled: true},
+		{Id: "demo", HashPw: userauth.MustHashPassword("demo"), Enabled: true},
 	}}
 
 	handler := router.New(router.Cfg{
@@ -55,15 +55,6 @@ func main() {
 	<-signalChan
 	logger.Info("Signal received, shutting down...")
 	_ = srv.Close()
-}
-
-// mustHashPw bcrypt-hashes a demo password; the static store holds hashes only.
-func mustHashPw(pw string) string {
-	h, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.MinCost)
-	if err != nil {
-		panic(err)
-	}
-	return string(h)
 }
 
 var demoSeedAccounts = []struct{ id, pw string }{
