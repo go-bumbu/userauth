@@ -11,3 +11,16 @@ users:
   - id: "demo2"
     pw: "{SHA}22EndpT+pBtCqKyCy7Z4uqxoOZA="
     enabled: true
+  - id: "alice"
+    pw: "alice"
+    enabled: true
+    email_2fa: "alice@example.com"
+  - id: "bob"
+    pw: "bob"
+    enabled: true
+    totp_secret: "JBSWY3DPEHPK3PXP"
+  - id: "carol"
+    pw: "carol"
+    enabled: true
+    email_2fa: "carol@example.com"
+    totp_secret: "JBSWY3DPEHPK3PXP"

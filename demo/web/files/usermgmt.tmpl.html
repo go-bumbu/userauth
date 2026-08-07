@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>User Management Demo</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3><a href="/?tab=admin">← Back</a></h3>
+<h4>User Management (in-memory SQLite)</h4>
+
+{{if .Msg}}<p class="error">{{.Msg}}</p>{{end}}
+
+<table class="user-table">
+    <thead>
+        <tr>
+            <th>Login ID</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {{range .Users}}
+        <tr>
+            <td>{{.LoginID}}</td>
+            <td>{{if .Enabled}}enabled{{else}}disabled{{end}}</td>
+            <td>
+                <form method="POST" action="/useradmin/{{.ID}}/enable" style="display:inline">
+                    <button type="submit">Enable</button>
+                </form>
+                <form method="POST" action="/useradmin/{{.ID}}/disable" style="display:inline">
+                    <button type="submit">Disable</button>
+                </form>
+            </td>
+        </tr>
+    {{end}}
+    </tbody>
+</table>
+
+<div class="pagination">
+    {{if .HasPrev}}<a href="/useradmin/?page={{.PrevPage}}">← Prev</a>{{end}}
+    <span>Page {{.Page}} of {{.TotalPages}}</span>
+    {{if .HasNext}}<a href="/useradmin/?page={{.NextPage}}">Next →</a>{{end}}
+</div>
+
+<h4>Create User</h4>
+<form method="POST" action="/useradmin/" class="login-form">
+    <label for="login">Login ID</label>
+    <input id="login" type="text" name="login" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" name="password" required>
+    <button type="submit">Create User</button>
+</form>
+</body>
+</html>

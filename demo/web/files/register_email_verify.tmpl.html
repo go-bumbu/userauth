@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Verify Email</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3>Verify your email</h3>
+
+{{if .Success}}
+<p class="info" style="color:#2a7a2a; font-style:normal; text-align:center;">{{.Success}}</p>
+{{else}}
+
+{{if .PlainCode}}
+<div class="pseudo-email">
+    <p><strong>Pseudo email</strong> — in production this would be sent to <em>{{.Email}}</em>.</p>
+    <p>Your verification code is: <span class="email-code">{{.PlainCode}}</span></p>
+</div>
+{{end}}
+
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+
+<form class="login-form" method="POST" action="/register/email/verify">
+    <input type="hidden" name="email" value="{{.Email}}">
+
+    <label for="code">Verification code</label>
+    <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]{6}"
+           placeholder="123456" autocomplete="one-time-code" required>
+
+    <button type="submit">Verify and create account</button>
+</form>
+
+<p><a href="/register/email">← Start over</a></p>
+{{end}}
+
+<p><a href="/?tab=register">← Back</a></p>
+</body>
+</html>

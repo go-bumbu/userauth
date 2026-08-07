@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Enter authenticator code</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3>Enter your authenticator code</h3>
+<p class="info" style="text-align:center;">Step 2 of 2: enter the 6-digit code from your authenticator app.</p>
+
+{{if .CurrentCode}}
+<div class="pseudo-email">
+    <p><strong>Pseudo authenticator app</strong> — in production this code lives on the user's device
+        (secret <code>{{.Secret}}</code>).</p>
+    <p>Current code: <span class="email-code">{{.CurrentCode}}</span></p>
+    <p>Codes rotate every 30 seconds — reload this page if it expires.</p>
+</div>
+{{end}}
+
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+
+<form class="login-form" method="POST" action="/totp/login/verify">
+    <input type="hidden" name="username" value="{{.Username}}">
+
+    <label for="code">Authenticator code</label>
+    <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]{6}"
+           placeholder="123456" autocomplete="one-time-code" required autofocus>
+
+    <button type="submit">Log in</button>
+</form>
+
+<p><a href="/totp/login">← Start over</a></p>
+</body>
+</html>

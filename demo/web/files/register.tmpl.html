@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>User Registration</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3>User Registration</h3>
+
+{{if .Success}}
+<p class="info" style="color:#2a7a2a; font-style:normal; text-align:center;">{{.Success}}</p>
+{{end}}
+
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+
+<form class="login-form" method="POST" action="/register">
+    <label for="login">Username</label>
+    <input type="text" id="login" name="login" value="{{.Login}}" autocomplete="username" required>
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autocomplete="new-password" required>
+
+    <label for="confirm">Confirm password</label>
+    <input type="password" id="confirm" name="confirm" autocomplete="new-password" required>
+
+    <button type="submit">Register</button>
+</form>
+
+<p><a href="/?tab=register">← Back</a></p>
+</body>
+</html>

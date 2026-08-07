@@ -17,7 +17,8 @@ func TestUserFromFile(t *testing.T) {
 			name:   "get demo user",
 			userId: "demo",
 			expect: userauth.User{
-				Id:      "demo",
+				ID:      "demo",
+				LoginID: "demo",
 				HashPw:  "demo",
 				Enabled: true,
 			},
@@ -76,4 +77,130 @@ func TestUserFromFile(t *testing.T) {
 		}
 	})
 
+}
+
+func TestAvailableSecondFactors(t *testing.T) {
+	users, err := FromFile("testdata/users.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tcs := []struct {
+		name   string
+		userID string
+		want   []userauth.SecondFactor
+	}{
+		{
+			name:   "no 2FA configured",
+			userID: "demo",
+			want:   nil,
+		},
+		{
+			name:   "email only",
+			userID: "alice",
+			want:   []userauth.SecondFactor{userauth.SecondFactorEmail},
+		},
+		{
+			name:   "totp only",
+			userID: "bob",
+			want:   []userauth.SecondFactor{userauth.SecondFactorTOTP},
+		},
+		{
+			name:   "both email and totp",
+			userID: "carol",
+			want:   []userauth.SecondFactor{userauth.SecondFactorTOTP, userauth.SecondFactorEmail},
+		},
+		{
+			name:   "unknown user",
+			userID: "nobody",
+			want:   nil,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := users.AvailableSecondFactors(tc.userID)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(got, tc.want); diff != "" {
+				t.Errorf("unexpected value (-got +want)\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGetTOTP(t *testing.T) {
+	users, err := FromFile("testdata/users.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// the expected secret comes from the fixture file, so the test does not
+	// duplicate the credential-looking literal
+	var bobSecret string
+	for _, u := range users.Users {
+		if u.Id == "bob" {
+			bobSecret = u.TOTPSecret
+		}
+	}
+	if bobSecret == "" {
+		t.Fatal("fixture user bob has no TOTP secret")
+	}
+
+	tcs := []struct {
+		name   string
+		userID string
+		want   userauth.TOTPData
+	}{
+		{
+			name:   "user with TOTP secret",
+			userID: "bob",
+			want:   userauth.TOTPData{Enabled: true, Secret: bobSecret},
+		},
+		{
+			name:   "user without TOTP",
+			userID: "demo",
+			want:   userauth.TOTPData{Enabled: false, Secret: ""},
+		},
+		{
+			name:   "unknown user",
+			userID: "nobody",
+			want:   userauth.TOTPData{Enabled: false},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := users.GetTOTP(tc.userID)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(got, tc.want); diff != "" {
+				t.Errorf("unexpected value (-got +want)\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGetUser_Email2FA(t *testing.T) {
+	users, err := FromFile("testdata/users.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := users.GetUser("alice")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := userauth.User{
+		ID:           "alice",
+		LoginID:      "alice",
+		HashPw:       "alice",
+		Enabled:      true,
+		PrimaryEmail: "alice@example.com",
+	}
+	if diff := cmp.Diff(got, want); diff != "" {
+		t.Errorf("unexpected value (-got +want)\n%s", diff)
+	}
 }

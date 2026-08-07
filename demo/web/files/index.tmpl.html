@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>User authentication demo</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3>userauth demo</h3>
+
+<div class="tabs">
+    <div class="tab-labels">
+        {{range $i, $s := .Sections}}
+        <button type="button" class="tab-label{{if eq $i 0}} active{{end}}" data-tab="{{$s.ID}}">{{$s.Title}}</button>
+        {{end}}
+    </div>
+
+    {{range $i, $s := .Sections}}
+    <div class="tab-content{{if eq $i 0}} active{{end}}" id="tab-{{$s.ID}}">
+        {{range $s.Info}}<p class="info">{{.}}</p>{{end}}
+
+        {{range $s.Examples}}
+        <p>{{.Title}}</p>
+        <ul>
+            {{range .Info}}<p class="info">{{.}}</p>{{end}}
+            {{range .Links}}
+            <li>{{if .Href}}<a href="{{.Href}}">{{.Text}}</a>{{else}}<code>{{.Text}}</code>{{end}} - {{.Desc}}</li>
+            {{end}}
+        </ul>
+        {{end}}
+    </div>
+    {{end}}
+</div>
+
+<script>
+    (function() {
+        var labels = document.querySelectorAll('.tab-label');
+        var contents = document.querySelectorAll('.tab-content');
+
+        function activate(name, updateURL) {
+            var content = document.getElementById('tab-' + name);
+            if (!content) return;
+            labels.forEach(function(l) { l.classList.toggle('active', l.dataset.tab === name); });
+            contents.forEach(function(c) { c.classList.toggle('active', c === content); });
+            if (updateURL) {
+                var url = new URL(location.href);
+                url.searchParams.set('tab', name);
+                history.replaceState(null, '', url);
+            }
+        }
+
+        labels.forEach(function(label) {
+            label.addEventListener('click', function() { activate(this.dataset.tab, true); });
+        });
+
+        // restore tab from URL on load
+        var tab = new URLSearchParams(location.search).get('tab');
+        if (tab) activate(tab, false);
+    })();
+</script>
+</body>
+</html>

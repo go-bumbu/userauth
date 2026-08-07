@@ -21,7 +21,22 @@ license-check: ## check for invalid licenses
 	@go list -m -mod=readonly  -json all  | go-licence-detector -includeIndirect -validate -rules allowedLicenses.json
 
 .PHONY: verify
-verify: test license-check lint benchmark ## run all tests
+verify: test license-check lint benchmark coverage ## run all tests
+
+# Default coverage threshold is 80
+COVERAGE_THRESHOLD ?= 80
+
+.PHONY: coverage
+coverage: ## check code coverage per package (demo and test utilities excluded)
+	@out=$$(go test -cover -covermode=atomic $$(go list ./... | grep -v '/demo' | grep -v '/storetest')) || { echo "$$out"; exit 1; }; \
+	echo "$$out" | awk -v threshold=$(COVERAGE_THRESHOLD) ' \
+		/\[no test files\]/ { printf "⚠️  %-70s no test files\n", $$2; next } \
+		/coverage:/ { \
+			for (i = 1; i <= NF; i++) if ($$i == "coverage:") { cov = $$(i+1); sub(/%/, "", cov); break }; \
+			if (cov + 0 < threshold) { printf "❌ %-70s %s%% (below %s%%)\n", $$2, cov, threshold; fail = 1 } \
+			else { printf "✅ %-70s %s%%\n", $$2, cov } \
+		} \
+		END { exit fail }'
 
 cover-report: ## generate a coverage report
 	go test -covermode=count -coverpkg=./... -coverprofile cover.out  ./...
@@ -30,9 +45,11 @@ cover-report: ## generate a coverage report
 
 
 
+DEMO_PORT ?= 8085
+
 .PHONY: demo
-run-demo: ## run the demo
-	go run demo/*.go
+run-demo: ## run the demo (port: make run-demo DEMO_PORT=9000)
+	DEMO_PORT=$(DEMO_PORT) go run ./demo/
 
 #==========================================================================================
 ##@ Release

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Enter login code</title>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+<h3>Enter your login code</h3>
+
+{{if .PlainCode}}
+<div class="pseudo-email">
+    <p><strong>Pseudo email</strong> — in production this would be sent to <em>{{.Email}}</em>.</p>
+    <p>Your login code is: <span class="email-code">{{.PlainCode}}</span></p>
+</div>
+{{end}}
+
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+
+<form class="login-form" method="POST" action="/emailcode/login/verify">
+    <input type="hidden" name="email" value="{{.Email}}">
+
+    <label for="code">Login code</label>
+    <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]{6}"
+           placeholder="123456" autocomplete="one-time-code" required>
+
+    <button type="submit">Log in</button>
+</form>
+
+<p><a href="/emailcode/login">← Start over</a></p>
+</body>
+</html>

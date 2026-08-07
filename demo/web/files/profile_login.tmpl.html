@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Profile Login</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<h3>My Profile — Login</h3>
+<p class="info" style="text-align:center;">
+    Log in with a database user. Pre-populated accounts:
+    <code>admin@example.com</code> / <code>admin</code> and
+    <code>demo@example.com</code> / <code>demo</code>.
+    Or register a new one via <a href="/register">/register</a>.
+</p>
+<form action="/profile/login" method="POST" class="login-form">
+    <label for="username">Username</label>
+    <input id="username" type="text" name="username" autocomplete="username" required>
+
+    <label for="password">Password</label>
+    <input id="password" type="password" name="password" autocomplete="current-password" required>
+
+    <button type="submit">Login</button>
+</form>
+<p><a href="/">← Back</a></p>
+</body>
+</html>
