@@ -145,3 +145,52 @@ func TestVerifyMatchTouchesLastUsed(t *testing.T) {
 		t.Error("VerifyMatch should set LastUsedAt")
 	}
 }
+
+func TestVerifyMatchNormalizesTokenID(t *testing.T) {
+	svc, rec, secret := mintRecoverable(t)
+	upperID := strings.ToUpper(rec.TokenID)
+	info, ok, err := svc.VerifyMatch(upperID, func(s string) bool { return s == secret })
+	if err != nil || !ok {
+		t.Fatalf("VerifyMatch with uppercase tokenID = %v, %v; token IDs are base36 and must survive case-mangling", ok, err)
+	}
+	if info.UserID != "u1" || info.TokenID != rec.TokenID {
+		t.Errorf("TokenInfo mismatch: %+v", info)
+	}
+}
+
+func TestVerifyMatchNilMatch(t *testing.T) {
+	svc, rec, _ := mintRecoverable(t)
+	if _, _, err := svc.VerifyMatch(rec.TokenID, nil); err == nil {
+		t.Error("VerifyMatch with nil match should error")
+	}
+}
+
+func TestVerifyMatchRejectsTransplantedCiphertext(t *testing.T) {
+	cipher, _ := pat.NewAESGCMCipher(testKey(), "k1")
+	svc, store := newTestService(t, pat.Opts{Cipher: cipher})
+	// mint two recoverable tokens for the same user
+	_, rec1, err := svc.Mint("u1", "tok1", nil, nil, pat.Recoverable)
+	if err != nil {
+		t.Fatalf("Mint 1: %v", err)
+	}
+	plaintext2, rec2, err := svc.Mint("u1", "tok2", nil, nil, pat.Recoverable)
+	if err != nil {
+		t.Fatalf("Mint 2: %v", err)
+	}
+	secret2 := plaintext2[strings.LastIndexByte(plaintext2, '_')+1:]
+	// swap SecretEnc/KeyID between the two records (transplant)
+	transplanted := rec1
+	transplanted.SecretEnc = rec2.SecretEnc // rec2's ciphertext now lives under rec1's tokenID
+	transplanted.KeyID = rec2.KeyID
+	if err := store.Delete("u1", rec1.TokenID); err != nil {
+		t.Fatalf("Delete rec1: %v", err)
+	}
+	if err := store.Insert(transplanted); err != nil {
+		t.Fatalf("Insert transplanted: %v", err)
+	}
+	// VerifyMatch with the secret that matches the transplanted ciphertext (secret2) must fail
+	// because aad=tokenID is now rec1.TokenID but the ciphertext was encrypted with aad=rec2.TokenID
+	if _, ok, err := svc.VerifyMatch(rec1.TokenID, func(s string) bool { return s == secret2 }); ok || err == nil {
+		t.Errorf("transplanted ciphertext: want failure, got ok=%v err=%v; aad binding should prevent cross-record transplants", ok, err)
+	}
+}

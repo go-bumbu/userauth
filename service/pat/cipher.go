@@ -10,10 +10,13 @@ import (
 // never manages keys: the consuming application decides where keys live and
 // injects an implementation via Opts.Cipher. KeyID identifies which key
 // produced a ciphertext so implementations can rotate keys (new key encrypts,
-// old keys stay decrypt-only).
+// old keys stay decrypt-only). The context parameter binds the ciphertext to
+// its record (AEAD additional authenticated data or KMS encryption context);
+// the same value must be presented at decrypt time, and implementations must
+// fail on mismatch.
 type SecretCipher interface {
-	Encrypt(plaintext string) (ciphertext, keyID string, err error)
-	Decrypt(ciphertext, keyID string) (string, error)
+	Encrypt(plaintext, context string) (ciphertext, keyID string, err error)
+	Decrypt(ciphertext, keyID, context string) (string, error)
 }
 
 // AESGCMCipher is a single-key AES-256-GCM SecretCipher. Rotation across
@@ -39,19 +42,23 @@ func NewAESGCMCipher(key []byte, keyID string) (*AESGCMCipher, error) {
 	return &AESGCMCipher{key: k, keyID: keyID}, nil
 }
 
-// Encrypt encrypts the plaintext and reports the key id used.
-func (c *AESGCMCipher) Encrypt(plaintext string) (string, string, error) {
-	ct, err := hashutil.Encrypt(plaintext, c.key)
+// Encrypt encrypts the plaintext with the given context and reports the key id used.
+func (c *AESGCMCipher) Encrypt(plaintext, context string) (string, string, error) {
+	ct, err := hashutil.Encrypt(plaintext, c.key, []byte(context))
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("pat: encrypt: %w", err)
 	}
 	return ct, c.keyID, nil
 }
 
-// Decrypt decrypts a ciphertext previously produced under keyID.
-func (c *AESGCMCipher) Decrypt(ciphertext, keyID string) (string, error) {
+// Decrypt decrypts a ciphertext previously produced under keyID with the given context.
+func (c *AESGCMCipher) Decrypt(ciphertext, keyID, context string) (string, error) {
 	if keyID != c.keyID {
 		return "", fmt.Errorf("pat: unknown cipher key id %q", keyID)
 	}
-	return hashutil.Decrypt(ciphertext, c.key)
+	pt, err := hashutil.Decrypt(ciphertext, c.key, []byte(context))
+	if err != nil {
+		return "", fmt.Errorf("pat: decrypt: %w", err)
+	}
+	return pt, nil
 }
