@@ -40,6 +40,13 @@ Feature-coverage gaps between the library and the demo, grouped by package.
 - [ ] File deliverer (`deliver/file`) — write code to disk (useful for dev/test)
 - [ ] SMTP deliverer (`deliver/smtp`) — send code via email
 
+## Personal access tokens (`service/pat`)
+- [x] Hash-only token in an auth chain (`Verify` via `tokenauth` + `ChainVerifier`)
+- [x] Recoverable token: salted-challenge login via `VerifyMatch` (Subsonic-style
+      user+token), same token as Bearer apiKey (`ParseToken`, `AESGCMCipher`)
+- [x] Self-service token management on the profile (`flow/pat/handlers` JSON API
+      and HTML forms)
+
 ## Auth chain (`auth/chain`)
 - [x] `chain.Authenticator` — cookie session first, basic auth fallback,
       unauthorized callback redirecting to login

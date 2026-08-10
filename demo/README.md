@@ -11,6 +11,9 @@ each file can be copied into a real application as a starting point.
   - Trusted-header auth, identity injected by a reverse proxy (`auth/headerauth`)
   - Cookie-session auth, the session middleware in isolation (`auth/cookieauth`)
   - Auth chain: cookie session with basic-auth fallback (`auth/chain`)
+  - Personal access token in an auth chain (`service/pat` + `auth/tokenauth`)
+  - Recoverable PAT ("user+token" mode): Subsonic-style salted-challenge login
+    via `VerifyMatch`, same token also valid as a Bearer apiKey (`service/pat`)
 - `examples/login` — login flows (`flow/login`): credentials are verified once
   and a cookie session is established
   - Password form login
