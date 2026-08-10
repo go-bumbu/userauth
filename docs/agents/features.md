@@ -67,6 +67,14 @@ has enabled.
 | SMTP delivery | Implemented | `service/verificationcode/deliver/smtp` — HTML template (embedded default or custom path), `@/path` password-from-file |
 | File delivery | Implemented | `service/verificationcode/deliver/file` — one `<timestamp>-<to>.txt` per code; dev/testing |
 
+## Personal Access Tokens (`service/pat/`)
+
+| Feature | Status | Notes |
+|---|---|---|
+| PAT storage modes | Implemented | `service/pat` — `Mint(..., Storage)`: `HashOnly` (SHA-256 only, verified whole via `Verify`) or `Recoverable` (secret additionally encrypted via `Opts.Cipher` `SecretCipher`; verified via `VerifyMatch(tokenID, match)` for challenge-style credentials). `ErrNotRecoverable` distinguishes "hash-only token presented as challenge" from bad credentials. Token IDs are lowercase base36 so they can serve as virtual usernames; `ParseToken` splits plaintext into (tokenID, secret). Key management is the consumer's: the lib ships single-key `AESGCMCipher`. |
+| Token stores | Implemented | `TokenStore` interface — in-memory (`store/memory`) and GORM (`userstore/userdb`) |
+| Token management | Implemented | `Service.Mint` (create, per-user limit enforced), `List` (user's tokens), `Revoke` (delete), throttled last-used tracking |
+
 ## Not implemented (catalogued in TODO.md)
 
 Rate limiting / lockout hooks, CSRF helpers, session listing/revocation,

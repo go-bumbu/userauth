@@ -1,7 +1,7 @@
 package pat_test
 
 import (
-	"crypto/md5"
+	"crypto/md5" // #nosec G501 -- test simulates Subsonic's MD5-based salted-token auth
 	"encoding/hex"
 	"errors"
 	"strings"
@@ -32,10 +32,10 @@ func TestVerifyMatchHappyPath(t *testing.T) {
 	svc, rec, secret := mintRecoverable(t)
 	// mirror the Subsonic salted-token check a consumer would implement
 	salt := "c19b2d"
-	sum := md5.Sum([]byte(secret + salt))
+	sum := md5.Sum([]byte(secret + salt)) // #nosec G401 -- test simulates Subsonic's MD5 auth
 	token := hex.EncodeToString(sum[:])
 	info, ok, err := svc.VerifyMatch(rec.TokenID, func(s string) bool {
-		got := md5.Sum([]byte(s + salt))
+		got := md5.Sum([]byte(s + salt)) // #nosec G401 -- test simulates Subsonic's MD5 auth
 		return hex.EncodeToString(got[:]) == token
 	})
 	if err != nil || !ok {
