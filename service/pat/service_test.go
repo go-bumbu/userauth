@@ -184,12 +184,20 @@ func TestMintRecoverableStoresEncryptedSecret(t *testing.T) {
 		t.Error("SecretHash must stay populated on recoverable tokens (apiKey path)")
 	}
 	secret := plaintext[strings.LastIndexByte(plaintext, '_')+1:]
-	got, err := cipher.Decrypt(stored.SecretEnc, stored.KeyID)
+	got, err := cipher.Decrypt(stored.SecretEnc, stored.KeyID, rec.TokenID)
 	if err != nil {
 		t.Fatalf("Decrypt: %v", err)
 	}
 	if got != secret {
 		t.Errorf("decrypted secret %q != minted secret %q", got, secret)
+	}
+	// recoverable tokens must work as apiKeys too (dual-use)
+	info, ok, err := svc.Verify(plaintext)
+	if err != nil || !ok {
+		t.Errorf("Verify on recoverable token = %v, %v; recoverable tokens must work as apiKeys", ok, err)
+	}
+	if info.UserID != "u1" || info.TokenID != rec.TokenID {
+		t.Errorf("TokenInfo mismatch: %+v", info)
 	}
 }
 
