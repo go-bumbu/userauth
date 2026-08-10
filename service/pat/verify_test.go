@@ -22,7 +22,7 @@ func (erroringUsers) GetUserByLogin(string) (userauth.User, error) {
 
 func TestVerifyHappyPath(t *testing.T) {
 	svc, _ := newTestService(t, pat.Opts{})
-	plaintext, rec, err := svc.Mint("u1", "api", []string{"read"}, nil)
+	plaintext, rec, err := svc.Mint("u1", "api", []string{"read"}, nil, pat.HashOnly)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -39,12 +39,12 @@ func TestVerifyHappyPath(t *testing.T) {
 
 func TestVerifyCredentialFailures(t *testing.T) {
 	svc, store := newTestService(t, pat.Opts{})
-	plaintext, rec, err := svc.Mint("u1", "api", nil, nil)
+	plaintext, rec, err := svc.Mint("u1", "api", nil, nil, pat.HashOnly)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
 	// a token whose user is disabled
-	plainDisabled, _, err := svc.Mint("u2", "disabled owner", nil, nil)
+	plainDisabled, _, err := svc.Mint("u2", "disabled owner", nil, nil, pat.HashOnly)
 	if err != nil {
 		t.Fatalf("Mint u2: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestVerifyExpiredNotWrongSecret(t *testing.T) {
 	// tokenID, so its hash does not match; this test pins the expiry branch
 	// specifically: correct secret, expired record.
 	svc, store := newTestService(t, pat.Opts{})
-	plaintext, rec, err := svc.Mint("u1", "api", nil, nil)
+	plaintext, rec, err := svc.Mint("u1", "api", nil, nil, pat.HashOnly)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestVerifyUserStoreErrorSurfaces(t *testing.T) {
 	}
 	// Mint does not consult the user store, so minting succeeds even though
 	// every user lookup fails; Verify then hits the failing lookup.
-	plaintext, _, err := svc.Mint("u1", "api", nil, nil)
+	plaintext, _, err := svc.Mint("u1", "api", nil, nil, pat.HashOnly)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestVerifyUserStoreErrorSurfaces(t *testing.T) {
 func TestVerifyTouchThrottling(t *testing.T) {
 	t.Run("first verify touches", func(t *testing.T) {
 		svc, store := newTestService(t, pat.Opts{})
-		plaintext, rec, _ := svc.Mint("u1", "api", nil, nil)
+		plaintext, rec, _ := svc.Mint("u1", "api", nil, nil, pat.HashOnly)
 		if _, ok, _ := svc.Verify(plaintext); !ok {
 			t.Fatal("Verify failed")
 		}
@@ -142,7 +142,7 @@ func TestVerifyTouchThrottling(t *testing.T) {
 	})
 	t.Run("within interval does not touch again", func(t *testing.T) {
 		svc, store := newTestService(t, pat.Opts{TouchInterval: time.Hour})
-		plaintext, rec, _ := svc.Mint("u1", "api", nil, nil)
+		plaintext, rec, _ := svc.Mint("u1", "api", nil, nil, pat.HashOnly)
 		if _, ok, _ := svc.Verify(plaintext); !ok {
 			t.Fatal("Verify failed")
 		}
@@ -157,7 +157,7 @@ func TestVerifyTouchThrottling(t *testing.T) {
 	})
 	t.Run("negative interval disables writes", func(t *testing.T) {
 		svc, store := newTestService(t, pat.Opts{TouchInterval: -1})
-		plaintext, rec, _ := svc.Mint("u1", "api", nil, nil)
+		plaintext, rec, _ := svc.Mint("u1", "api", nil, nil, pat.HashOnly)
 		if _, ok, _ := svc.Verify(plaintext); !ok {
 			t.Fatal("Verify failed")
 		}

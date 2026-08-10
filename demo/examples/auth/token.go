@@ -66,7 +66,7 @@ func Token(log *slog.Logger, users userauth.UserGetter, rnd *web.Renderer) http.
 
 	r := mux.NewRouter()
 	r.Path("/new").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		plaintext, _, err := pats.Mint("demo", "demo token", nil, nil)
+		plaintext, _, err := pats.Mint("demo", "demo token", nil, nil, patsvc.HashOnly)
 		if err != nil {
 			http.Error(w, "could not mint token: "+err.Error(), http.StatusInternalServerError)
 			return

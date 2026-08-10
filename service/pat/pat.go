@@ -67,6 +67,19 @@ var ErrInvalidExpiry = errors.New("invalid token expiry")
 // SecretCipher is configured.
 var ErrNoCipher = errors.New("no secret cipher configured")
 
+// Storage selects how a token's secret is persisted.
+type Storage int
+
+const (
+	// HashOnly stores only the SHA-256 hash of the secret. The token can be
+	// verified only when presented whole (Verify) — the "apikey" type.
+	HashOnly Storage = iota
+	// Recoverable additionally stores the secret encrypted with the
+	// service's SecretCipher, enabling VerifyMatch for credentials derived
+	// from the secret — the "user+token" type.
+	Recoverable
+)
+
 // buildToken assembles the wire format <prefix>_<tokenID>_<secret>.
 func buildToken(prefix, tokenID, secret string) string {
 	return prefix + "_" + tokenID + "_" + secret
@@ -97,7 +110,7 @@ const (
 	defaultPrefix        = "pat"
 	defaultMaxPerUser    = 25
 	defaultTouchInterval = time.Hour
-	tokenIDLength        = 8
+	tokenIDLength        = 10 // lowercase base36: token IDs double as virtual usernames and must survive case-mangling clients
 	secretLength         = 43 // ~256 bits of base62
 	maxNameLength        = 100
 )
@@ -178,15 +191,20 @@ func NewService(store TokenStore, users userauth.UserGetter, opts Opts) (*Servic
 }
 
 // Mint creates a token for the user and returns the full plaintext exactly
-// once; only the SHA-256 hash of the secret is stored. Errors:
-// ErrInvalidName, ErrInvalidExpiry, ErrTooManyTokens, or store failures.
-func (s *Service) Mint(userID, name string, scopes []string, expiresAt *time.Time) (string, TokenRecord, error) {
+// once. HashOnly stores only the SHA-256 hash of the secret; Recoverable
+// additionally stores the secret encrypted via the configured SecretCipher.
+// Errors: ErrInvalidName, ErrInvalidExpiry, ErrTooManyTokens, ErrNoCipher,
+// or store failures.
+func (s *Service) Mint(userID, name string, scopes []string, expiresAt *time.Time, storage Storage) (string, TokenRecord, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len([]rune(name)) > maxNameLength {
 		return "", TokenRecord{}, fmt.Errorf("%w: must be 1-%d characters", ErrInvalidName, maxNameLength)
 	}
 	if expiresAt != nil && expiresAt.Before(time.Now()) {
 		return "", TokenRecord{}, fmt.Errorf("%w: must be in the future", ErrInvalidExpiry)
+	}
+	if storage == Recoverable && s.cipher == nil {
+		return "", TokenRecord{}, ErrNoCipher
 	}
 	if s.maxPerUser > 0 {
 		existing, err := s.store.ListByUser(userID)
@@ -197,7 +215,7 @@ func (s *Service) Mint(userID, name string, scopes []string, expiresAt *time.Tim
 			return "", TokenRecord{}, fmt.Errorf("%w: limit is %d", ErrTooManyTokens, s.maxPerUser)
 		}
 	}
-	tokenID, err := hashutil.GenerateBase62(tokenIDLength)
+	tokenID, err := hashutil.GenerateBase36(tokenIDLength)
 	if err != nil {
 		return "", TokenRecord{}, err
 	}
@@ -213,6 +231,13 @@ func (s *Service) Mint(userID, name string, scopes []string, expiresAt *time.Tim
 		Scopes:     scopes,
 		ExpiresAt:  expiresAt,
 		CreatedAt:  time.Now().UTC(),
+	}
+	if storage == Recoverable {
+		enc, keyID, err := s.cipher.Encrypt(secret)
+		if err != nil {
+			return "", TokenRecord{}, fmt.Errorf("encrypt secret: %w", err)
+		}
+		rec.SecretEnc, rec.KeyID = enc, keyID
 	}
 	if err := s.store.Insert(rec); err != nil {
 		return "", TokenRecord{}, err

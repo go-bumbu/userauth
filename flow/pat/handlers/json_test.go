@@ -140,7 +140,7 @@ func TestCreateTooManyTokens(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	h, svc := newFixture(t)
-	_, rec, err := svc.Mint("u1", "mine", nil, nil)
+	_, rec, err := svc.Mint("u1", "mine", nil, nil, patsvc.HashOnly)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}

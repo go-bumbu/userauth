@@ -8,7 +8,7 @@ import (
 
 func TestChainVerifier(t *testing.T) {
 	svc, _ := newTestService(t, pat.Opts{})
-	plaintext, rec, err := svc.Mint("u1", "api", []string{"read"}, nil)
+	plaintext, rec, err := svc.Mint("u1", "api", []string{"read"}, nil, pat.HashOnly)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
