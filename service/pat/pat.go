@@ -63,6 +63,10 @@ var ErrInvalidName = errors.New("invalid token name")
 // ErrInvalidExpiry is returned by Mint for an expiry in the past.
 var ErrInvalidExpiry = errors.New("invalid token expiry")
 
+// ErrNoCipher is returned when a recoverable operation is requested but no
+// SecretCipher is configured.
+var ErrNoCipher = errors.New("no secret cipher configured")
+
 // buildToken assembles the wire format <prefix>_<tokenID>_<secret>.
 func buildToken(prefix, tokenID, secret string) string {
 	return prefix + "_" + tokenID + "_" + secret
@@ -116,6 +120,7 @@ type Service struct {
 	prefix        string
 	maxPerUser    int // -1 = unlimited
 	touchInterval time.Duration
+	cipher        SecretCipher
 	logger        *slog.Logger
 }
 
@@ -131,7 +136,11 @@ type Opts struct {
 	// skipped while the stored value is younger than the interval. 0 uses
 	// the default (1h); a negative value disables the writes entirely.
 	TouchInterval time.Duration
-	Logger        *slog.Logger
+	// Cipher encrypts the secrets of Recoverable tokens. Optional: when nil
+	// the service is restricted to hash-only storage and any recoverable
+	// operation fails with ErrNoCipher.
+	Cipher SecretCipher
+	Logger *slog.Logger
 }
 
 // NewService wires the service to its store and user lookup.
@@ -163,6 +172,7 @@ func NewService(store TokenStore, users userauth.UserGetter, opts Opts) (*Servic
 		prefix:        opts.Prefix,
 		maxPerUser:    opts.MaxPerUser,
 		touchInterval: opts.TouchInterval,
+		cipher:        opts.Cipher,
 		logger:        opts.Logger,
 	}, nil
 }
