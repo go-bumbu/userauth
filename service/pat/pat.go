@@ -91,10 +91,12 @@ func buildToken(prefix, tokenID, secret string) string {
 	return prefix + "_" + tokenID + "_" + secret
 }
 
-// parseToken splits a presented token on its last two underscores, so the
+// ParseToken splits a presented token on its last two underscores, so the
 // prefix itself may contain underscores. ok is false for anything malformed
-// or with a non-matching prefix.
-func parseToken(prefix, presented string) (tokenID, secret string, ok bool) {
+// or with a non-matching prefix. Consumers also use it to split a freshly
+// minted plaintext into its tokenID (the user+token virtual username) and
+// secret (the password) for display.
+func ParseToken(prefix, presented string) (tokenID, secret string, ok bool) {
 	i := strings.LastIndexByte(presented, '_')
 	if i < 0 {
 		return "", "", false
@@ -269,7 +271,7 @@ func (s *Service) Revoke(userID, tokenID string) error {
 // record's LastUsedAt is updated, throttled by TouchInterval; a failed touch
 // is logged and ignored (it must not fail an otherwise valid request).
 func (s *Service) Verify(presented string) (TokenInfo, bool, error) {
-	tokenID, secret, ok := parseToken(s.prefix, presented)
+	tokenID, secret, ok := ParseToken(s.prefix, presented)
 	if !ok {
 		s.logger.Debug("pat verify: malformed token")
 		return TokenInfo{}, false, nil

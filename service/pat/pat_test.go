@@ -17,9 +17,9 @@ func TestTokenCodecRoundTrip(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			token := buildToken(tc.prefix, tc.tokenID, tc.secret)
-			id, sec, ok := parseToken(tc.prefix, token)
+			id, sec, ok := ParseToken(tc.prefix, token)
 			if !ok {
-				t.Fatalf("parseToken(%q, %q) not ok", tc.prefix, token)
+				t.Fatalf("ParseToken(%q, %q) not ok", tc.prefix, token)
 			}
 			if id != tc.tokenID || sec != tc.secret {
 				t.Errorf("got (%q, %q), want (%q, %q)", id, sec, tc.tokenID, tc.secret)
@@ -43,9 +43,22 @@ func TestParseTokenRejects(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, _, ok := parseToken(tc.prefix, tc.presented); ok {
-				t.Errorf("parseToken(%q, %q) should reject", tc.prefix, tc.presented)
+			if _, _, ok := ParseToken(tc.prefix, tc.presented); ok {
+				t.Errorf("ParseToken(%q, %q) should reject", tc.prefix, tc.presented)
 			}
 		})
+	}
+}
+
+func TestParseTokenExported(t *testing.T) {
+	tokenID, secret, ok := ParseToken("aether", "aether_abc123defg_S3CR3T")
+	if !ok || tokenID != "abc123defg" || secret != "S3CR3T" {
+		t.Errorf("ParseToken = %q, %q, %v", tokenID, secret, ok)
+	}
+	if _, _, ok := ParseToken("aether", "other_abc123defg_S3CR3T"); ok {
+		t.Error("wrong prefix must not parse")
+	}
+	if _, _, ok := ParseToken("aether", "garbage"); ok {
+		t.Error("malformed input must not parse")
 	}
 }
