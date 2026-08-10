@@ -24,11 +24,17 @@ type TokenRecord struct {
 	UserID     string     // owning user (canonical ID)
 	Name       string     // user-given label
 	SecretHash string     // SHA-256 hex of the secret part; never the plaintext
+	SecretEnc  string     // encrypted secret (cipher output); empty for hash-only tokens
+	KeyID      string     // id of the cipher key that produced SecretEnc; empty for hash-only
 	Scopes     []string   // opaque strings, interpreted only by the consuming app
 	ExpiresAt  *time.Time // nil = never expires
 	LastUsedAt *time.Time
 	CreatedAt  time.Time
 }
+
+// Recoverable reports whether the secret was stored encrypted and can be
+// recovered at verify time (the "user+token" storage mode).
+func (r TokenRecord) Recoverable() bool { return r.SecretEnc != "" }
 
 // TokenStore persists token records. Implementations are pure persistence.
 type TokenStore interface {
