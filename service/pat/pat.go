@@ -23,12 +23,18 @@ type TokenRecord struct {
 	TokenID    string     // public lookup key, unique
 	UserID     string     // owning user (canonical ID)
 	Name       string     // user-given label
-	SecretHash string     // SHA-256 hex of the secret part; never the plaintext
+	SecretHash string     `json:"-"` // SHA-256 hex of the secret part; never the plaintext
+	SecretEnc  string     `json:"-"` // encrypted secret (cipher output); empty for hash-only tokens
+	KeyID      string     `json:"-"` // id of the cipher key that produced SecretEnc; empty for hash-only
 	Scopes     []string   // opaque strings, interpreted only by the consuming app
 	ExpiresAt  *time.Time // nil = never expires
 	LastUsedAt *time.Time
 	CreatedAt  time.Time
 }
+
+// Recoverable reports whether the secret was stored encrypted and can be
+// recovered at verify time (the "user+token" storage mode).
+func (r TokenRecord) Recoverable() bool { return r.SecretEnc != "" }
 
 // TokenStore persists token records. Implementations are pure persistence.
 type TokenStore interface {
@@ -57,15 +63,44 @@ var ErrInvalidName = errors.New("invalid token name")
 // ErrInvalidExpiry is returned by Mint for an expiry in the past.
 var ErrInvalidExpiry = errors.New("invalid token expiry")
 
+// ErrNoCipher is returned when a recoverable operation is requested but no
+// SecretCipher is configured.
+var ErrNoCipher = errors.New("no secret cipher configured")
+
+// ErrNotRecoverable is returned by VerifyMatch for hash-only tokens, whose
+// secret cannot be recovered. Deliberately distinguishable from a failed
+// match so consumers can answer "this credential type is not supported for
+// this token" instead of "wrong credentials". Consumers must not surface the
+// distinction between "unknown token" and ErrNotRecoverable to unauthenticated
+// callers (it reveals a token-ID existence oracle).
+var ErrNotRecoverable = errors.New("token secret is not recoverable")
+
+// Storage selects how a token's secret is persisted.
+type Storage int
+
+const (
+	// HashOnly stores only the SHA-256 hash of the secret. The token can be
+	// verified only when presented whole (Verify) — the "apikey" type.
+	HashOnly Storage = iota
+	// Recoverable additionally stores the secret encrypted with the
+	// service's SecretCipher, enabling VerifyMatch for credentials derived
+	// from the secret — the "user+token" type.
+	Recoverable
+)
+
 // buildToken assembles the wire format <prefix>_<tokenID>_<secret>.
 func buildToken(prefix, tokenID, secret string) string {
 	return prefix + "_" + tokenID + "_" + secret
 }
 
-// parseToken splits a presented token on its last two underscores, so the
+// ParseToken splits a presented token on its last two underscores, so the
 // prefix itself may contain underscores. ok is false for anything malformed
-// or with a non-matching prefix.
-func parseToken(prefix, presented string) (tokenID, secret string, ok bool) {
+// or with a non-matching prefix. Consumers also use it to split a freshly
+// minted plaintext into its tokenID (the user+token virtual username) and
+// secret (the password) for display. The returned tokenID and secret are
+// case-sensitive as presented; no normalization is applied (the apiKey flow
+// requires the base62 secret intact).
+func ParseToken(prefix, presented string) (tokenID, secret string, ok bool) {
 	i := strings.LastIndexByte(presented, '_')
 	if i < 0 {
 		return "", "", false
@@ -87,7 +122,7 @@ const (
 	defaultPrefix        = "pat"
 	defaultMaxPerUser    = 25
 	defaultTouchInterval = time.Hour
-	tokenIDLength        = 8
+	tokenIDLength        = 10 // lowercase base36: token IDs double as virtual usernames and must survive case-mangling clients
 	secretLength         = 43 // ~256 bits of base62
 	maxNameLength        = 100
 )
@@ -110,6 +145,7 @@ type Service struct {
 	prefix        string
 	maxPerUser    int // -1 = unlimited
 	touchInterval time.Duration
+	cipher        SecretCipher
 	logger        *slog.Logger
 }
 
@@ -125,7 +161,11 @@ type Opts struct {
 	// skipped while the stored value is younger than the interval. 0 uses
 	// the default (1h); a negative value disables the writes entirely.
 	TouchInterval time.Duration
-	Logger        *slog.Logger
+	// Cipher encrypts the secrets of Recoverable tokens. Optional: when nil
+	// the service is restricted to hash-only storage and any recoverable
+	// operation fails with ErrNoCipher.
+	Cipher SecretCipher
+	Logger *slog.Logger
 }
 
 // NewService wires the service to its store and user lookup.
@@ -157,20 +197,26 @@ func NewService(store TokenStore, users userauth.UserGetter, opts Opts) (*Servic
 		prefix:        opts.Prefix,
 		maxPerUser:    opts.MaxPerUser,
 		touchInterval: opts.TouchInterval,
+		cipher:        opts.Cipher,
 		logger:        opts.Logger,
 	}, nil
 }
 
 // Mint creates a token for the user and returns the full plaintext exactly
-// once; only the SHA-256 hash of the secret is stored. Errors:
-// ErrInvalidName, ErrInvalidExpiry, ErrTooManyTokens, or store failures.
-func (s *Service) Mint(userID, name string, scopes []string, expiresAt *time.Time) (string, TokenRecord, error) {
+// once. HashOnly stores only the SHA-256 hash of the secret; Recoverable
+// additionally stores the secret encrypted via the configured SecretCipher.
+// Errors: ErrInvalidName, ErrInvalidExpiry, ErrTooManyTokens, ErrNoCipher,
+// or store failures.
+func (s *Service) Mint(userID, name string, scopes []string, expiresAt *time.Time, storage Storage) (string, TokenRecord, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len([]rune(name)) > maxNameLength {
 		return "", TokenRecord{}, fmt.Errorf("%w: must be 1-%d characters", ErrInvalidName, maxNameLength)
 	}
 	if expiresAt != nil && expiresAt.Before(time.Now()) {
 		return "", TokenRecord{}, fmt.Errorf("%w: must be in the future", ErrInvalidExpiry)
+	}
+	if storage == Recoverable && s.cipher == nil {
+		return "", TokenRecord{}, ErrNoCipher
 	}
 	if s.maxPerUser > 0 {
 		existing, err := s.store.ListByUser(userID)
@@ -181,7 +227,7 @@ func (s *Service) Mint(userID, name string, scopes []string, expiresAt *time.Tim
 			return "", TokenRecord{}, fmt.Errorf("%w: limit is %d", ErrTooManyTokens, s.maxPerUser)
 		}
 	}
-	tokenID, err := hashutil.GenerateBase62(tokenIDLength)
+	tokenID, err := hashutil.GenerateBase36(tokenIDLength)
 	if err != nil {
 		return "", TokenRecord{}, err
 	}
@@ -198,14 +244,22 @@ func (s *Service) Mint(userID, name string, scopes []string, expiresAt *time.Tim
 		ExpiresAt:  expiresAt,
 		CreatedAt:  time.Now().UTC(),
 	}
+	if storage == Recoverable {
+		enc, keyID, err := s.cipher.Encrypt(secret, tokenID)
+		if err != nil {
+			return "", TokenRecord{}, fmt.Errorf("encrypt secret: %w", err)
+		}
+		rec.SecretEnc, rec.KeyID = enc, keyID
+	}
 	if err := s.store.Insert(rec); err != nil {
 		return "", TokenRecord{}, err
 	}
 	return buildToken(s.prefix, tokenID, secret), rec, nil
 }
 
-// List returns the user's token records, oldest first (metadata; SecretHash
-// is present but callers rendering responses must never serialize it).
+// List returns the user's token records, oldest first (metadata; SecretHash,
+// SecretEnc, and KeyID are present but tagged json:"-" so they are omitted
+// from marshaling — callers rendering responses must not serialize them).
 func (s *Service) List(userID string) ([]TokenRecord, error) {
 	return s.store.ListByUser(userID)
 }
@@ -215,14 +269,16 @@ func (s *Service) Revoke(userID, tokenID string) error {
 	return s.store.Delete(userID, tokenID)
 }
 
-// Verify checks a presented token and returns the identity it asserts.
-// ok=false covers every credential failure — malformed token, unknown ID,
-// wrong secret, expired, owner missing or disabled — indistinguishably;
-// err is only returned for store or user-store I/O failures. On success the
-// record's LastUsedAt is updated, throttled by TouchInterval; a failed touch
-// is logged and ignored (it must not fail an otherwise valid request).
+// Verify checks a presented token and returns the identity it asserts. The
+// token is parsed as-is with no normalization (the base62 secret is
+// case-sensitive). ok=false covers every credential failure — malformed token,
+// unknown ID, wrong secret, expired, owner missing or disabled —
+// indistinguishably; err is only returned for store or user-store I/O
+// failures. On success the record's LastUsedAt is updated, throttled by
+// TouchInterval; a failed touch is logged and ignored (it must not fail an
+// otherwise valid request).
 func (s *Service) Verify(presented string) (TokenInfo, bool, error) {
-	tokenID, secret, ok := parseToken(s.prefix, presented)
+	tokenID, secret, ok := ParseToken(s.prefix, presented)
 	if !ok {
 		s.logger.Debug("pat verify: malformed token")
 		return TokenInfo{}, false, nil
@@ -240,27 +296,34 @@ func (s *Service) Verify(presented string) (TokenInfo, bool, error) {
 		s.logger.Debug("pat verify: secret mismatch", "tokenID", tokenID)
 		return TokenInfo{}, false, nil
 	}
+	return s.finishVerify(rec)
+}
+
+// finishVerify runs the checks shared by Verify and VerifyMatch once the
+// secret has been validated: expiry, owner lookup and enabled flag, and the
+// throttled last-used touch.
+func (s *Service) finishVerify(rec TokenRecord) (TokenInfo, bool, error) {
 	if rec.ExpiresAt != nil && rec.ExpiresAt.Before(time.Now()) {
-		s.logger.Debug("pat verify: token expired", "tokenID", tokenID)
+		s.logger.Debug("pat verify: token expired", "tokenID", rec.TokenID)
 		return TokenInfo{}, false, nil
 	}
 	user, err := s.users.GetUser(rec.UserID)
 	if err != nil {
 		if errors.Is(err, userauth.ErrUserNotFound) || errors.Is(err, userauth.ErrUserDisabled) {
-			s.logger.Debug("pat verify: owner not found or disabled", "tokenID", tokenID)
+			s.logger.Debug("pat verify: owner not found or disabled", "tokenID", rec.TokenID)
 			return TokenInfo{}, false, nil
 		}
 		return TokenInfo{}, false, err
 	}
 	if !user.Enabled {
-		s.logger.Debug("pat verify: owner disabled", "tokenID", tokenID)
+		s.logger.Debug("pat verify: owner disabled", "tokenID", rec.TokenID)
 		return TokenInfo{}, false, nil
 	}
 
 	if s.touchInterval >= 0 &&
 		(rec.LastUsedAt == nil || time.Since(*rec.LastUsedAt) >= s.touchInterval) {
-		if err := s.store.Touch(tokenID, time.Now().UTC()); err != nil {
-			s.logger.Warn("pat verify: failed to update last-used", "tokenID", tokenID, "err", err)
+		if err := s.store.Touch(rec.TokenID, time.Now().UTC()); err != nil {
+			s.logger.Warn("pat verify: failed to update last-used", "tokenID", rec.TokenID, "err", err)
 		}
 	}
 
@@ -271,4 +334,51 @@ func (s *Service) Verify(presented string) (TokenInfo, bool, error) {
 		Name:    rec.Name,
 		Scopes:  rec.Scopes,
 	}, true, nil
+}
+
+// VerifyMatch verifies a token whose secret the caller can only test, not
+// present — e.g. a challenge derived from the secret. It looks the token up
+// by ID, decrypts the stored secret, and asks match whether it satisfies the
+// presented credential. The token ID is normalized to lowercase (token IDs are
+// base36 and serve as virtual usernames that must survive case-mangling
+// clients). Unknown IDs, failed matches, expired tokens, and disabled owners
+// all return (zero, false, nil); hash-only tokens return ErrNotRecoverable; a
+// missing cipher returns ErrNoCipher; store and cipher I/O failures surface as
+// errors. On success the record's LastUsedAt is updated, throttled by
+// TouchInterval. The match callback should use crypto/subtle for constant-time
+// comparison; a non-constant-time comparison leaks a timing side-channel on
+// the derived challenge.
+func (s *Service) VerifyMatch(tokenID string, match func(secret string) bool) (TokenInfo, bool, error) {
+	if match == nil {
+		return TokenInfo{}, false, fmt.Errorf("pat: match callback is required")
+	}
+	tokenID = strings.ToLower(tokenID)
+	rec, err := s.store.GetByTokenID(tokenID)
+	if err != nil {
+		if errors.Is(err, ErrTokenNotFound) {
+			s.logger.Debug("pat verify-match: unknown token id")
+			return TokenInfo{}, false, nil
+		}
+		return TokenInfo{}, false, err
+	}
+	if !rec.Recoverable() {
+		return TokenInfo{}, false, ErrNotRecoverable
+	}
+	// check expiry before decrypting — don't hand a doomed token's plaintext to consumer code
+	if rec.ExpiresAt != nil && rec.ExpiresAt.Before(time.Now()) {
+		s.logger.Debug("pat verify-match: token expired", "tokenID", tokenID)
+		return TokenInfo{}, false, nil
+	}
+	if s.cipher == nil {
+		return TokenInfo{}, false, ErrNoCipher
+	}
+	secret, err := s.cipher.Decrypt(rec.SecretEnc, rec.KeyID, rec.TokenID)
+	if err != nil {
+		return TokenInfo{}, false, fmt.Errorf("decrypt secret: %w", err)
+	}
+	if !match(secret) {
+		s.logger.Debug("pat verify-match: secret mismatch", "tokenID", tokenID)
+		return TokenInfo{}, false, nil
+	}
+	return s.finishVerify(rec)
 }

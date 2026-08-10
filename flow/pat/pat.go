@@ -42,7 +42,7 @@ func (f *Flow) Create(r *http.Request, name string, scopes []string, expiresAt *
 	if err != nil {
 		return "", patsvc.TokenRecord{}, ErrNoIdentity
 	}
-	return f.Service.Mint(userID, name, scopes, expiresAt)
+	return f.Service.Mint(userID, name, scopes, expiresAt, patsvc.HashOnly)
 }
 
 // List returns the request user's token records.

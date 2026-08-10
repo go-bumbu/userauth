@@ -21,7 +21,7 @@ func (s Store) GetTOTP(userID string) (userauth.TOTPData, error) {
 	}
 	secret := m.Secret
 	if s.totpEncKey != nil && secret != "" {
-		decrypted, err := hashutil.Decrypt(secret, s.totpEncKey)
+		decrypted, err := hashutil.Decrypt(secret, s.totpEncKey, nil)
 		if err != nil {
 			return userauth.TOTPData{}, fmt.Errorf("decrypt TOTP secret: %w", err)
 		}
@@ -42,7 +42,7 @@ func (s Store) SetTOTP(userID string, data userauth.TOTPData) error {
 	}
 	secret := data.Secret
 	if s.totpEncKey != nil && secret != "" {
-		encrypted, encErr := hashutil.Encrypt(secret, s.totpEncKey)
+		encrypted, encErr := hashutil.Encrypt(secret, s.totpEncKey, nil)
 		if encErr != nil {
 			return fmt.Errorf("encrypt TOTP secret: %w", encErr)
 		}

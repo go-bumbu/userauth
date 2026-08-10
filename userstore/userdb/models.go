@@ -122,6 +122,8 @@ type patModel struct {
 	UserID     string `gorm:"index;not null"`
 	Name       string `gorm:"not null"`
 	SecretHash string `gorm:"not null"`
+	SecretEnc  string // encrypted secret (cipher output); empty for hash-only tokens
+	KeyID      string // cipher key id for SecretEnc; empty for hash-only
 	Scopes     string // JSON-encoded []string; empty when no scopes
 	ExpiresAt  *time.Time
 	LastUsedAt *time.Time

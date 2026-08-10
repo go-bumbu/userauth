@@ -232,3 +232,24 @@ func TestGenerateBase62(t *testing.T) {
 		t.Error("GenerateBase62(0) should error")
 	}
 }
+
+func TestGenerateBase36(t *testing.T) {
+	got, err := GenerateBase36(10)
+	if err != nil {
+		t.Fatalf("GenerateBase36: %v", err)
+	}
+	if len(got) != 10 {
+		t.Errorf("length = %d, want 10", len(got))
+	}
+	for _, c := range got {
+		if !strings.ContainsRune(base36Charset, c) {
+			t.Errorf("character %q outside base36 charset", c)
+		}
+	}
+	if got2, _ := GenerateBase36(10); got == got2 {
+		t.Error("two generations should differ")
+	}
+	if _, err := GenerateBase36(0); err == nil {
+		t.Error("length 0 should error")
+	}
+}

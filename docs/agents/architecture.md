@@ -82,6 +82,34 @@ Placement rules (they generated this tree; new packages should follow them):
 - **Transport-agnostic core**: the login engine works on user IDs,
   passwords and codes; HTTP lives in transports (`flow/login/handlers`).
 
+## Personal access tokens: service = policy, store = persistence
+
+`service/pat` owns token format, secret hashing, expiry, scopes, and the
+once-only-plaintext rule. Persistence is delegated to a `TokenStore`; user
+lookup (enabled check at verify time) to a `userauth.UserGetter`.
+
+- **`pat.Service` owns all policy**: token generation (base36 token IDs, base62
+  secrets), SHA-256 hashing, expiry, per-user limits, last-used throttling, and
+  the optional recoverable-secret storage. The hash-only vs recoverable storage
+  decision happens at mint time via the `Storage` enum (`HashOnly` vs
+  `Recoverable`).
+- **Hash-only tokens** store only the SHA-256 hash of the secret. The token can
+  be verified only when presented whole (the "apiKey" flow via `Verify`) —
+  wire format `<prefix>_<tokenID>_<secret>`.
+- **Recoverable tokens** additionally store the secret encrypted via a
+  consumer-provided `SecretCipher` implementation, enabling `VerifyMatch` for
+  credentials derived from the secret (e.g. Subsonic's salted-token auth). The
+  ciphertext is bound to its record via AEAD additional authenticated data
+  (the token ID as context) so cross-record transplants fail. Key management
+  is the consumer's concern — the library never manages keys. Recoverable
+  tokens still work as apiKeys (dual-use: the hash remains populated).
+- **`TokenStore` implementations are pure persistence**: `Insert`, `GetByTokenID`,
+  `ListByUser`, `Delete`, `Touch` (last-used updates). The default is
+  `userstore/userdb`, in-memory is `service/pat/store/memory`.
+- **`ParseToken`** splits the wire format into its three segments; **`finishVerify`**
+  is the shared tail of `Verify` and `VerifyMatch` (expiry, owner lookup and
+  enabled flag, throttled last-used touch).
+
 ## Verification codes: service = policy, store = persistence
 
 Redesigned 2026-06-30 (`../superpowers/specs/2026-06-30-verification-code-hybrid-design.md`):

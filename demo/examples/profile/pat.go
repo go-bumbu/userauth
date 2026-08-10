@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth/auth/cookieauth"
+	patsvc "github.com/go-bumbu/userauth/service/pat"
 )
 
 // patView renders the PAT management page, optionally showing a
@@ -79,7 +80,7 @@ func (a *app) patCreate(w http.ResponseWriter, r *http.Request) {
 		t := time.Now().AddDate(0, 0, days)
 		expiresAt = &t
 	}
-	plaintext, _, err := a.pats.Mint(ud.UserId, name, scopes, expiresAt)
+	plaintext, _, err := a.pats.Mint(ud.UserId, name, scopes, expiresAt, patsvc.HashOnly)
 	if err != nil {
 		a.patViewWithMsg(w, r, "", "", "Could not create token: "+err.Error())
 		return

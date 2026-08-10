@@ -175,4 +175,35 @@ func Run(t *testing.T, newStore func(t *testing.T) pat.TokenStore) {
 			}
 		}
 	})
+
+	t.Run("recoverable fields round-trip", func(t *testing.T) {
+		s := newStore(t)
+		in := rec("recov1", "user1")
+		in.SecretEnc = "bm9uY2UtY2lwaGVydGV4dA=="
+		in.KeyID = "k1"
+		if err := s.Insert(in); err != nil {
+			t.Fatalf("Insert: %v", err)
+		}
+		got, err := s.GetByTokenID("recov1")
+		if err != nil {
+			t.Fatalf("GetByTokenID: %v", err)
+		}
+		if got.SecretEnc != in.SecretEnc || got.KeyID != "k1" {
+			t.Errorf("recoverable fields mismatch: %+v", got)
+		}
+		if !got.Recoverable() {
+			t.Error("Recoverable() should be true when SecretEnc is set")
+		}
+		// hash-only records stay non-recoverable
+		if err := s.Insert(rec("plain1", "user1")); err != nil {
+			t.Fatalf("Insert plain: %v", err)
+		}
+		plain, err := s.GetByTokenID("plain1")
+		if err != nil {
+			t.Fatalf("GetByTokenID plain: %v", err)
+		}
+		if plain.Recoverable() {
+			t.Error("Recoverable() should be false when SecretEnc is empty")
+		}
+	})
 }

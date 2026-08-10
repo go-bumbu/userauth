@@ -96,6 +96,24 @@ func Section(log *slog.Logger, users userauth.UserGetter, rnd *web.Renderer) exa
 					r.PathPrefix("/token/").Handler(http.StripPrefix("/token", Token(log, users, rnd)))
 				},
 			},
+			{
+				Title: "Recoverable token (user+token)",
+				Info: []template.HTML{
+					"Mints a <i>recoverable</i> PAT: the secret is stored encrypted (AES-GCM via " +
+						"<code>SecretCipher</code>) in addition to its hash, so the server can answer " +
+						"challenge-style logins where the secret itself never travels on the wire.",
+					"The token splits into a virtual username (the token ID) and password (the secret) — " +
+						"the protocol used by Subsonic-compatible clients: <code>t = md5(password + salt)</code>. " +
+						"The same token still works whole as a Bearer apiKey.",
+				},
+				Links: []examples.Link{
+					{Href: "/rectoken/new", Text: "/rectoken/new", Desc: "mint a recoverable token for user 'demo' (demo only, no credential check)"},
+					{Href: "/rectoken/protected", Text: "/rectoken/protected", Desc: "protected endpoint (salted challenge ?u=&t=&s= or Bearer token)"},
+				},
+				Mount: func(r *mux.Router) {
+					r.PathPrefix("/rectoken/").Handler(http.StripPrefix("/rectoken", Recoverable(log, users, rnd)))
+				},
+			},
 		},
 	}
 }
