@@ -185,3 +185,25 @@ func GenerateBase62(length int) (string, error) {
 	}
 	return string(b), nil
 }
+
+// base36Charset is lowercase alphanumeric, for identifiers that must survive
+// case-insensitive or case-mangling contexts (e.g. username fields).
+const base36Charset = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+// GenerateBase36 returns a cryptographically random lowercase base36 string
+// of the given length.
+func GenerateBase36(length int) (string, error) {
+	if length <= 0 {
+		return "", fmt.Errorf("GenerateBase36: length must be positive, got %d", length)
+	}
+	b := make([]byte, length)
+	charsetLen := big.NewInt(int64(len(base36Charset)))
+	for i := range b {
+		n, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			return "", fmt.Errorf("generate base36: %w", err)
+		}
+		b[i] = base36Charset[n.Int64()]
+	}
+	return string(b), nil
+}
