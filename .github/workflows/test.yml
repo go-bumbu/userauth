@@ -1,0 +1,35 @@
+name: golang
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # The DB-backed stores test against in-memory SQLite via mattn/go-sqlite3,
+    # which is a cgo driver: with CGO_ENABLED=0 those tests panic instead of
+    # failing to compile.
+    env:
+      CGO_ENABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: run tests
+        run: make test
+
+      - name: ensure test coverage
+        run: make coverage
+
+      - name: run benchmarks
+        run: make benchmark
