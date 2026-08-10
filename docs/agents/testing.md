@@ -32,6 +32,27 @@
 - Useful single-target invocations: `go test ./userstore/userdb/`,
   `go test ./... -run TestName`.
 
+## CI (`.github/workflows/`)
+
+Three workflows, all triggered on push to `main`/`master` and on every pull
+request. Each one just calls the make targets above, so a green `make verify`
+locally means green CI.
+
+| Workflow | Runs |
+|---|---|
+| `test.yml` | `make test`, `make coverage`, `make benchmark` |
+| `golangci-lint.yml` | `golangci-lint` via `golangci-lint-action`, version pinned to the local one (`v2.12.2`) |
+| `license-check.yml` | installs `go-licence-detector`, then `make license-check` |
+
+- Go version comes from `go-version-file: go.mod` — bump `go.mod` and CI
+  follows.
+- `CGO_ENABLED: 1` is required: the DB-backed stores test against in-memory
+  SQLite through `mattn/go-sqlite3`, a cgo driver, and the tests panic when it
+  is built without cgo.
+- The `replace github.com/go-bumbu/http => ../http` directive is inert in CI —
+  no package requires that module — so the missing sibling checkout is fine.
+  If something starts importing it, CI needs the sibling repo checked out.
+
 ## Linters (`.golangci.yaml`)
 
 Standard set (errcheck, govet, ineffassign, staticcheck, unused) plus
