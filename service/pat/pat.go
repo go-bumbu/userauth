@@ -67,6 +67,12 @@ var ErrInvalidExpiry = errors.New("invalid token expiry")
 // SecretCipher is configured.
 var ErrNoCipher = errors.New("no secret cipher configured")
 
+// ErrNotRecoverable is returned by VerifyMatch for hash-only tokens, whose
+// secret cannot be recovered. Deliberately distinguishable from a failed
+// match so consumers can answer "this credential type is not supported for
+// this token" instead of "wrong credentials".
+var ErrNotRecoverable = errors.New("token secret is not recoverable")
+
 // Storage selects how a token's secret is persisted.
 type Storage int
 
@@ -281,27 +287,34 @@ func (s *Service) Verify(presented string) (TokenInfo, bool, error) {
 		s.logger.Debug("pat verify: secret mismatch", "tokenID", tokenID)
 		return TokenInfo{}, false, nil
 	}
+	return s.finishVerify(rec)
+}
+
+// finishVerify runs the checks shared by Verify and VerifyMatch once the
+// secret has been validated: expiry, owner lookup and enabled flag, and the
+// throttled last-used touch.
+func (s *Service) finishVerify(rec TokenRecord) (TokenInfo, bool, error) {
 	if rec.ExpiresAt != nil && rec.ExpiresAt.Before(time.Now()) {
-		s.logger.Debug("pat verify: token expired", "tokenID", tokenID)
+		s.logger.Debug("pat verify: token expired", "tokenID", rec.TokenID)
 		return TokenInfo{}, false, nil
 	}
 	user, err := s.users.GetUser(rec.UserID)
 	if err != nil {
 		if errors.Is(err, userauth.ErrUserNotFound) || errors.Is(err, userauth.ErrUserDisabled) {
-			s.logger.Debug("pat verify: owner not found or disabled", "tokenID", tokenID)
+			s.logger.Debug("pat verify: owner not found or disabled", "tokenID", rec.TokenID)
 			return TokenInfo{}, false, nil
 		}
 		return TokenInfo{}, false, err
 	}
 	if !user.Enabled {
-		s.logger.Debug("pat verify: owner disabled", "tokenID", tokenID)
+		s.logger.Debug("pat verify: owner disabled", "tokenID", rec.TokenID)
 		return TokenInfo{}, false, nil
 	}
 
 	if s.touchInterval >= 0 &&
 		(rec.LastUsedAt == nil || time.Since(*rec.LastUsedAt) >= s.touchInterval) {
-		if err := s.store.Touch(tokenID, time.Now().UTC()); err != nil {
-			s.logger.Warn("pat verify: failed to update last-used", "tokenID", tokenID, "err", err)
+		if err := s.store.Touch(rec.TokenID, time.Now().UTC()); err != nil {
+			s.logger.Warn("pat verify: failed to update last-used", "tokenID", rec.TokenID, "err", err)
 		}
 	}
 
@@ -312,4 +325,38 @@ func (s *Service) Verify(presented string) (TokenInfo, bool, error) {
 		Name:    rec.Name,
 		Scopes:  rec.Scopes,
 	}, true, nil
+}
+
+// VerifyMatch verifies a token whose secret the caller can only test, not
+// present — e.g. a challenge derived from the secret. It looks the token up
+// by ID, decrypts the stored secret, and asks match whether it satisfies the
+// presented credential. Unknown IDs, failed matches, expired tokens, and
+// disabled owners all return (zero, false, nil); hash-only tokens return
+// ErrNotRecoverable; a missing cipher returns ErrNoCipher; store and cipher
+// I/O failures surface as errors. On success the record's LastUsedAt is
+// updated, throttled by TouchInterval.
+func (s *Service) VerifyMatch(tokenID string, match func(secret string) bool) (TokenInfo, bool, error) {
+	rec, err := s.store.GetByTokenID(tokenID)
+	if err != nil {
+		if errors.Is(err, ErrTokenNotFound) {
+			s.logger.Debug("pat verify-match: unknown token id")
+			return TokenInfo{}, false, nil
+		}
+		return TokenInfo{}, false, err
+	}
+	if !rec.Recoverable() {
+		return TokenInfo{}, false, ErrNotRecoverable
+	}
+	if s.cipher == nil {
+		return TokenInfo{}, false, ErrNoCipher
+	}
+	secret, err := s.cipher.Decrypt(rec.SecretEnc, rec.KeyID)
+	if err != nil {
+		return TokenInfo{}, false, fmt.Errorf("decrypt secret: %w", err)
+	}
+	if !match(secret) {
+		s.logger.Debug("pat verify-match: secret mismatch", "tokenID", tokenID)
+		return TokenInfo{}, false, nil
+	}
+	return s.finishVerify(rec)
 }
