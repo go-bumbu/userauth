@@ -32,6 +32,17 @@ Flow
   `RecoveryCodeVerifier`, `CodeVerifier`). Well-known IDs: `password`, `totp`,
   `email`, `sms`, `recovery`. `Method.Verify` must return `(false, nil)` for
   wrong input and reserve errors for internal failures.
+- **Submissions are guarded per login identifier via `Flow.Guard`.** The
+  guard runs before any credential work, keyed by the **raw loginID** (never
+  the resolved user), so unknown accounts throttle exactly like existing
+  ones and the guard cannot become an account-existence oracle. It is what
+  makes the password step non-brute-forceable per account. Counted failures:
+  unknown user, disabled user, wrong credential; **not** counted:
+  method-not-offered (no secret was tested) and guard denials themselves. A
+  denial is a credential-shaped failure (uniform `Result{OK:false}`).
+  `ThrottleGuard` adapts a `Throttle` (entries namespaced `guard:<method>`);
+  custom guards get the `*http.Request` as an escape hatch for per-IP keys
+  or risk scoring — the library never interprets the request.
 - **Small-keyspace factors are throttled at the verifier.** `TOTPMethod` and
   `RecoveryMethod` take a `*login.Throttle` (escalating delay per consecutive
   wrong guess: `DefaultFreeFailures` 3, then `DefaultBaseDelay` 2s doubling up
@@ -114,7 +125,8 @@ Presets construct the whole Flow from a config struct:
   factor (only for users with TOTP enrolled) and optional recovery-code
   stand-in. Requires `Attempts` when TOTP is set. `Throttle` defaults to an
   in-memory throttle (per-instance); multi-instance deployments should pass
-  one backed by `throttlestore/db`.
+  one backed by `throttlestore/db`. The same throttle also backs the flow's
+  `Guard` (password step).
 - `NewEmailCode(EmailCodeCfg)` — passwordless email-code login; single factor,
   so no attempt store. `Resend` defaults to an in-memory limiter
   (per-instance); multi-instance deployments should pass one backed by

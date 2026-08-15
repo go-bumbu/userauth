@@ -88,6 +88,11 @@ type Flow struct {
 	// Set it for any flow with deliverable factors: without it Initiate will
 	// send an email/SMS on every request. Nil means unlimited.
 	Resend *ResendLimiter
+	// Guard throttles Submit per login identifier before any credential
+	// work; it is what makes the password step non-brute-forceable per
+	// account (small-keyspace factors are additionally throttled at their
+	// verifier). Nil means unguarded. See Guard and ThrottleGuard.
+	Guard  Guard
 	Logger *slog.Logger // optional; defaults to slog.Default()
 }
 
@@ -158,6 +163,17 @@ func (f *Flow) getEnabledUser(loginID string) (userauth.User, bool, error) {
 	return user, true, nil
 }
 
+// guardFail records a credential failure with the guard, when one is set.
+func (f *Flow) guardFail(r *http.Request, loginID, methodID string) error {
+	if f.Guard == nil {
+		return nil
+	}
+	if err := f.Guard.Fail(r, loginID, methodID); err != nil {
+		return fmt.Errorf("login: guard: %w", err)
+	}
+	return nil
+}
+
 // Submit verifies one factor and advances the attempt. When the policy is
 // satisfied it creates the session and clears the attempt.
 //
@@ -177,9 +193,31 @@ func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, loginID, methodID,
 		return Result{}, fmt.Errorf("login: method %q not registered", methodID)
 	}
 
+	// The guard runs before any credential work, keyed by the raw loginID:
+	// unknown accounts must throttle exactly like existing ones. A denial is
+	// a credential-shaped failure and does not itself count as one.
+	if f.Guard != nil {
+		allowed, err := f.Guard.Allow(r, loginID, methodID)
+		if err != nil {
+			return Result{}, fmt.Errorf("login: guard: %w", err)
+		}
+		if !allowed {
+			f.logger().Debug("login: submission throttled", "loginID", loginID, "method", methodID)
+			return Result{}, nil
+		}
+	}
+
 	user, ok, err := f.getEnabledUser(loginID)
-	if err != nil || !ok {
+	if err != nil {
 		return Result{}, err
+	}
+	if !ok {
+		// Unknown or disabled user: counted, or the guard only ever
+		// throttles guesses against existing accounts.
+		if err := f.guardFail(r, loginID, methodID); err != nil {
+			return Result{}, err
+		}
+		return Result{}, nil
 	}
 
 	// From here on, use the canonical user.ID: attempts, verifiers and the
@@ -205,7 +243,15 @@ func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, loginID, methodID,
 	}
 	if !ok {
 		f.logger().Debug("login: factor verification failed", "userID", user.ID, "method", methodID)
+		if err := f.guardFail(r, loginID, methodID); err != nil {
+			return Result{}, err
+		}
 		return Result{}, nil
+	}
+	if f.Guard != nil {
+		if err := f.Guard.Success(r, loginID, methodID); err != nil {
+			return Result{}, fmt.Errorf("login: guard: %w", err)
+		}
 	}
 
 	att.Satisfied = append(att.Satisfied, methodID)

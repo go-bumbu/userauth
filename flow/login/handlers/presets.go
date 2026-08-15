@@ -23,7 +23,8 @@ type PasswordTOTPCfg struct {
 	TOTP userauth.TOTPGetter
 	// Recovery optionally lets a recovery code stand in for the TOTP code.
 	Recovery userauth.RecoveryCodeVerifier
-	// Throttle slows down repeated wrong TOTP/recovery guesses. Nil gets an
+	// Throttle slows down repeated wrong TOTP/recovery guesses, and (via
+	// login.ThrottleGuard) wrong passwords per login identifier. Nil gets an
 	// in-memory throttle with the package defaults — per-instance state, so
 	// multi-instance deployments should pass a Throttle backed by
 	// throttlestore/db. It cannot be disabled: 6-digit codes are
@@ -55,6 +56,7 @@ func NewPasswordTOTP(cfg PasswordTOTPCfg) *JSON {
 			Policy:   passwordTOTPPolicy(cfg),
 			Attempts: cfg.Attempts,
 			Session:  cfg.Session,
+			Guard:    login.ThrottleGuard{Throttle: cfg.Throttle},
 			Logger:   cfg.Logger,
 		},
 		Logger: cfg.Logger,
@@ -105,6 +107,11 @@ type EmailCodeCfg struct {
 	// backed by throttlestore/db. It cannot be disabled: an unlimited
 	// endpoint is an email-bombing relay.
 	Resend *login.ResendLimiter
+	// Guard throttles verify submissions per login identifier (covering
+	// unknown accounts too — wrong codes for existing users are already
+	// capped per issued code). Nil gets a ThrottleGuard sharing the Resend
+	// limiter's store.
+	Guard  login.Guard
 	Logger *slog.Logger
 }
 
@@ -116,6 +123,9 @@ func NewEmailCode(cfg EmailCodeCfg) *JSON {
 	if cfg.Resend == nil {
 		cfg.Resend = &login.ResendLimiter{Store: throttlememory.New()}
 	}
+	if cfg.Guard == nil {
+		cfg.Guard = login.ThrottleGuard{Throttle: &login.Throttle{Store: cfg.Resend.Store}}
+	}
 	return &JSON{
 		Flow: &login.Flow{
 			Users:   cfg.Users,
@@ -123,6 +133,7 @@ func NewEmailCode(cfg EmailCodeCfg) *JSON {
 			Policy:  login.RequireAny(login.Chain{login.MethodEmail}),
 			Session: cfg.Session, // single factor: no attempt store needed
 			Resend:  cfg.Resend,
+			Guard:   cfg.Guard,
 			Logger:  cfg.Logger,
 		},
 		Logger: cfg.Logger,
