@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/flow/login"
+	throttlememory "github.com/go-bumbu/userauth/flow/login/throttlestore/memory"
 	"github.com/go-bumbu/userauth/service/verificationcode"
 )
 
@@ -22,6 +23,12 @@ type PasswordTOTPCfg struct {
 	TOTP userauth.TOTPGetter
 	// Recovery optionally lets a recovery code stand in for the TOTP code.
 	Recovery userauth.RecoveryCodeVerifier
+	// Throttle slows down repeated wrong TOTP/recovery guesses. Nil gets an
+	// in-memory throttle with the package defaults — per-instance state, so
+	// multi-instance deployments should pass a Throttle backed by
+	// throttlestore/db. It cannot be disabled: 6-digit codes are
+	// brute-forceable without one.
+	Throttle *login.Throttle
 	Logger   *slog.Logger
 }
 
@@ -31,12 +38,15 @@ type PasswordTOTPCfg struct {
 // and complete at the verify endpoint with a TOTP — or, when configured, a
 // recovery — code.
 func NewPasswordTOTP(cfg PasswordTOTPCfg) *JSON {
+	if cfg.Throttle == nil {
+		cfg.Throttle = &login.Throttle{Store: throttlememory.New()}
+	}
 	methods := []login.Method{login.PasswordMethod{Users: cfg.Users}}
 	if cfg.TOTP != nil {
-		methods = append(methods, login.TOTPMethod{TOTP: cfg.TOTP})
+		methods = append(methods, login.TOTPMethod{TOTP: cfg.TOTP, Throttle: cfg.Throttle})
 	}
 	if cfg.Recovery != nil {
-		methods = append(methods, login.RecoveryMethod{Codes: cfg.Recovery})
+		methods = append(methods, login.RecoveryMethod{Codes: cfg.Recovery, Throttle: cfg.Throttle})
 	}
 	return &JSON{
 		Flow: &login.Flow{
@@ -89,7 +99,13 @@ type EmailCodeCfg struct {
 	// reveal whether a code was issued.
 	Deliver verificationcode.Deliverer
 	Session login.UserLogin
-	Logger  *slog.Logger
+	// Resend bounds how often the request-code endpoint issues a code per
+	// user. Nil gets an in-memory limiter with the package defaults —
+	// per-instance state, so multi-instance deployments should pass one
+	// backed by throttlestore/db. It cannot be disabled: an unlimited
+	// endpoint is an email-bombing relay.
+	Resend *login.ResendLimiter
+	Logger *slog.Logger
 }
 
 // NewEmailCode returns JSON endpoints for passwordless email-code login: the
@@ -97,12 +113,16 @@ type EmailCodeCfg struct {
 // — the response never reveals whether the account exists), and the verify
 // endpoint with method "email" completes the login.
 func NewEmailCode(cfg EmailCodeCfg) *JSON {
+	if cfg.Resend == nil {
+		cfg.Resend = &login.ResendLimiter{Store: throttlememory.New()}
+	}
 	return &JSON{
 		Flow: &login.Flow{
 			Users:   cfg.Users,
 			Methods: []login.Method{login.EmailCodeMethod(cfg.Codes, cfg.Deliver)},
 			Policy:  login.RequireAny(login.Chain{login.MethodEmail}),
 			Session: cfg.Session, // single factor: no attempt store needed
+			Resend:  cfg.Resend,
 			Logger:  cfg.Logger,
 		},
 		Logger: cfg.Logger,

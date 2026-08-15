@@ -84,7 +84,11 @@ type Flow struct {
 	Attempts AttemptStore
 	Session  UserLogin
 	Expiry   time.Duration // attempt lifetime; defaults to DefaultAttemptExpiry
-	Logger   *slog.Logger  // optional; defaults to slog.Default()
+	// Resend bounds how often Initiate issues a code per user and method.
+	// Set it for any flow with deliverable factors: without it Initiate will
+	// send an email/SMS on every request. Nil means unlimited.
+	Resend *ResendLimiter
+	Logger *slog.Logger // optional; defaults to slog.Default()
 }
 
 func (f *Flow) logger() *slog.Logger {
@@ -272,6 +276,22 @@ func (f *Flow) Initiate(r *http.Request, loginID, methodID string) error {
 	if !contains(next, methodID) {
 		f.logger().Debug("login: initiation for method not offered", "userID", user.ID, "method", methodID)
 		return nil
+	}
+
+	// Rate-limited issuance is skipped silently, like the other
+	// enumeration-safe cases: the client sees the same response either way.
+	if f.Resend != nil {
+		allowed, err := f.Resend.Allow(user.ID, methodID)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			f.logger().Debug("login: initiation rate limited", "userID", user.ID, "method", methodID)
+			return nil
+		}
+		if err := f.Resend.Record(user.ID, methodID); err != nil {
+			return err
+		}
 	}
 
 	if err := init.Initiate(r.Context(), user); err != nil {

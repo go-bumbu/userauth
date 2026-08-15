@@ -68,8 +68,13 @@ func (m PasswordMethod) Verify(userID, input string) (bool, error) {
 // --- totp ---
 
 // TOTPMethod verifies an authenticator-app code.
+//
+// Throttle should always be set outside of tests: TOTP codes are 6 digits, so
+// without verifier-side throttling the keyspace is brute-forceable within a
+// code's validity window (RFC 6238 §5.2 requires the throttle).
 type TOTPMethod struct {
-	TOTP userauth.TOTPGetter
+	TOTP     userauth.TOTPGetter
+	Throttle *Throttle
 }
 
 func (m TOTPMethod) ID() string { return MethodTOTP }
@@ -82,20 +87,57 @@ func (m TOTPMethod) Verify(userID, input string) (bool, error) {
 	if !data.Enabled {
 		return false, nil
 	}
-	return totp.Validate(input, data.Secret), nil
+	return throttled(m.Throttle, userID, MethodTOTP, func() (bool, error) {
+		return totp.Validate(input, data.Secret), nil
+	})
 }
 
 // --- recovery ---
 
-// RecoveryMethod verifies a single-use recovery code.
+// RecoveryMethod verifies a single-use recovery code. Throttle should be set
+// outside of tests: recovery codes are a small fixed set of short strings.
 type RecoveryMethod struct {
-	Codes userauth.RecoveryCodeVerifier
+	Codes    userauth.RecoveryCodeVerifier
+	Throttle *Throttle
 }
 
 func (m RecoveryMethod) ID() string { return MethodRecovery }
 
 func (m RecoveryMethod) Verify(userID, input string) (bool, error) {
-	return m.Codes.VerifyRecoveryCode(userID, input)
+	return throttled(m.Throttle, userID, MethodRecovery, func() (bool, error) {
+		return m.Codes.VerifyRecoveryCode(userID, input)
+	})
+}
+
+// throttled runs verify under the throttle: a delayed attempt is rejected as
+// a credential failure without invoking the verifier, a wrong guess is
+// recorded, and a correct one clears the failure state. A nil throttle runs
+// the verifier directly.
+func throttled(t *Throttle, userID, method string, verify func() (bool, error)) (bool, error) {
+	if t == nil {
+		return verify()
+	}
+	allowed, err := t.Allow(userID, method)
+	if err != nil {
+		return false, err
+	}
+	if !allowed {
+		return false, nil
+	}
+	ok, err := verify()
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		if err := t.Fail(userID, method); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+	if err := t.Success(userID, method); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // --- delivered one-time codes (email, sms) ---

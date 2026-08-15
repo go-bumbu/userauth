@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-bumbu/userauth/flow/login"
 	"github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
+	throttlememory "github.com/go-bumbu/userauth/flow/login/throttlestore/memory"
 	"github.com/go-bumbu/userauth/internal/hashutil"
 	"github.com/go-bumbu/userauth/service/verificationcode"
 	csmemory "github.com/go-bumbu/userauth/service/verificationcode/store/memory"
@@ -285,6 +286,27 @@ func TestFlowInitiate(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/login", nil)
 		if err := f.flow.Initiate(r, "bob", "password"); err == nil {
 			t.Fatal("want error for non-initiable method")
+		}
+	})
+
+	t.Run("resend limiter silently skips issuance", func(t *testing.T) {
+		f := newFixture(policy)
+		f.flow.Resend = &login.ResendLimiter{Store: throttlememory.New()}
+
+		initiate(t, f, "bob", "email")
+		first := f.deliverer.code
+		if first == "" {
+			t.Fatal("first code should be delivered")
+		}
+		f.deliverer.code = ""
+		initiate(t, f, "bob", "email") // no error: skipped silently
+		if f.deliverer.code != "" {
+			t.Error("second request within the interval must not deliver a code")
+		}
+		// the first code still verifies — issuance was skipped, not replaced
+		res := submit(t, f, "bob", "email", first)
+		if !res.OK || !res.Done {
+			t.Fatalf("first code should still verify, got %+v", res)
 		}
 	})
 }

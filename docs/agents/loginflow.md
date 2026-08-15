@@ -32,6 +32,17 @@ Flow
   `RecoveryCodeVerifier`, `CodeVerifier`). Well-known IDs: `password`, `totp`,
   `email`, `sms`, `recovery`. `Method.Verify` must return `(false, nil)` for
   wrong input and reserve errors for internal failures.
+- **Small-keyspace factors are throttled at the verifier.** `TOTPMethod` and
+  `RecoveryMethod` take a `*login.Throttle` (escalating delay per consecutive
+  wrong guess: `DefaultFreeFailures` 3, then `DefaultBaseDelay` 2s doubling up
+  to `DefaultMaxDelay` 5m; success resets). Backoff, never hard lockout — a
+  lockout lets an attacker deny the owner access. A delayed attempt is a
+  credential failure (`false, nil`), so the uniform-401 invariant holds.
+  Throttle state lives in a `ThrottleStore`
+  (`flow/login/throttlestore/{memory,db}` — db uses the `login_throttle`
+  table, one row per user+method, own auto-migration). Delivered codes
+  (email/SMS) are instead capped by `verificationcode.Service` per issued
+  code (`Opts.MaxAttempts`, default 5, code invalidated when exhausted).
 - **`Initiator`** is the optional issuance side of a deliverable factor
   (generate + persist + deliver a code). `CodeMethod` implements it;
   `EmailCodeMethod(codes, deliver)` wires the common email case with
@@ -40,6 +51,15 @@ Flow
   methods are silently skipped, delivery failures are logged, not returned.
   Deliverers should queue and return — synchronous SMTP leaks issuance through
   response timing.
+- **Issuance is rate limited via `Flow.Resend`** (`*login.ResendLimiter`):
+  first code free, then a doubling wait per further request
+  (`DefaultResendInterval` 1m up to `DefaultResendMaxWait` 15m, state
+  forgotten `DefaultResendReset` 1h after the last request). Rate-limited
+  issuance is skipped silently like the other enumeration-safe cases; the
+  previously issued code stays valid. The limiter shares the `ThrottleStore`
+  interface (entries namespaced `initiate:<method>`), so one store instance
+  can back both it and a `Throttle`. Set `Resend` on any flow with
+  deliverable factors — nil means unlimited, i.e. an email/SMS bombing relay.
 - **Policies return decisions only, never side effects.** `RequireAny(Chain...)`
   covers static rules ("password then totp", "or email code alone");
   `SecondFactorAfter(first, provider)` is the classic dynamic 2FA policy (first
@@ -92,9 +112,13 @@ Presets construct the whole Flow from a config struct:
 
 - `NewPasswordTOTP(PasswordTOTPCfg)` — password login with optional TOTP second
   factor (only for users with TOTP enrolled) and optional recovery-code
-  stand-in. Requires `Attempts` when TOTP is set.
+  stand-in. Requires `Attempts` when TOTP is set. `Throttle` defaults to an
+  in-memory throttle (per-instance); multi-instance deployments should pass
+  one backed by `throttlestore/db`.
 - `NewEmailCode(EmailCodeCfg)` — passwordless email-code login; single factor,
-  so no attempt store.
+  so no attempt store. `Resend` defaults to an in-memory limiter
+  (per-instance); multi-instance deployments should pass one backed by
+  `throttlestore/db`.
 
 Form-based login is deliberately DIY: callers own form parsing/rendering and
 call `Flow.Submit` directly (`demo/examples/login/password.go` shows the

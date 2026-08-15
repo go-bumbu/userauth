@@ -8,6 +8,7 @@ import (
 type codeEntry struct {
 	hash      string
 	expiresAt time.Time
+	attempts  int
 }
 
 // Store is an in-memory CodeStore. Safe for concurrent use. One Store instance
@@ -31,7 +32,9 @@ func (s *Store) StoreCode(userID, hash string, expiresAt time.Time) error {
 
 // ConsumeCode atomically checks for a non-expired matching hash and deletes it
 // on success (one-time use). Returns false if absent, expired, or mismatched.
-func (s *Store) ConsumeCode(userID, hash string) (bool, error) {
+// Each mismatch counts as a failed attempt; reaching maxAttempts deletes the
+// code.
+func (s *Store) ConsumeCode(userID, hash string, maxAttempts int) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -44,6 +47,12 @@ func (s *Store) ConsumeCode(userID, hash string) (bool, error) {
 		return false, nil
 	}
 	if entry.hash != hash {
+		entry.attempts++
+		if entry.attempts >= maxAttempts {
+			delete(s.codes, userID)
+		} else {
+			s.codes[userID] = entry
+		}
 		return false, nil
 	}
 	delete(s.codes, userID)
