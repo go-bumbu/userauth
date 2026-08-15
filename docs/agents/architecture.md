@@ -30,6 +30,8 @@ userstore/               user persistence: adapters for the root user interfaces
   staticusers/  userdb/
 service/verificationcode/  shared one-time-code service: Service, CodeStore, CodeVerifier,
   store/memory/            Deliverer, with its own store/ and deliver/{smtp,file} adapters
+service/throttle/        brute-force backoff policy: Backoff + Store, consumed by the
+  store/{memory,db}/       login engine (verifier throttle, guard, resend limit) and basicauth
 internal/hashutil/       crypto plumbing (bcrypt, SHA-256, AES-GCM) — not public API
 demo/                    consumer of the library; never imported by it
 ```

@@ -1,4 +1,4 @@
-// Package memory provides an in-memory login.ThrottleStore for development
+// Package memory provides an in-memory throttle.Store for development
 // and testing. State is per-instance and lost on restart; multi-instance
 // deployments should use the db store.
 package memory

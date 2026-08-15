@@ -50,7 +50,7 @@ Flow
   lockout lets an attacker deny the owner access. A delayed attempt is a
   credential failure (`false, nil`), so the uniform-401 invariant holds.
   Throttle state lives in a `ThrottleStore`
-  (`flow/login/throttlestore/{memory,db}` — db uses the `login_throttle`
+  (`service/throttle/store/{memory,db}` — db uses the `login_throttle`
   table, one row per user+method, own auto-migration). Delivered codes
   (email/SMS) are instead capped by `verificationcode.Service` per issued
   code (`Opts.MaxAttempts`, default 5, code invalidated when exhausted).
@@ -125,12 +125,12 @@ Presets construct the whole Flow from a config struct:
   factor (only for users with TOTP enrolled) and optional recovery-code
   stand-in. Requires `Attempts` when TOTP is set. `Throttle` defaults to an
   in-memory throttle (per-instance); multi-instance deployments should pass
-  one backed by `throttlestore/db`. The same throttle also backs the flow's
+  one backed by `service/throttle/store/db`. The same throttle also backs the flow's
   `Guard` (password step).
 - `NewEmailCode(EmailCodeCfg)` — passwordless email-code login; single factor,
   so no attempt store. `Resend` defaults to an in-memory limiter
   (per-instance); multi-instance deployments should pass one backed by
-  `throttlestore/db`.
+  `service/throttle/store/db`.
 
 Form-based login is deliberately DIY: callers own form parsing/rendering and
 call `Flow.Submit` directly (`demo/examples/login/password.go` shows the

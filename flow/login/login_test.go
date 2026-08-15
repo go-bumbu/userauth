@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-bumbu/userauth/flow/login"
 	"github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
-	throttlememory "github.com/go-bumbu/userauth/flow/login/throttlestore/memory"
 	"github.com/go-bumbu/userauth/internal/hashutil"
+	throttlememory "github.com/go-bumbu/userauth/service/throttle/store/memory"
 	"github.com/go-bumbu/userauth/service/verificationcode"
 	csmemory "github.com/go-bumbu/userauth/service/verificationcode/store/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"

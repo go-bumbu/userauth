@@ -6,10 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/auth/basicauth"
 	"github.com/go-bumbu/userauth/internal/hashutil"
+	"github.com/go-bumbu/userauth/service/throttle"
+	throttlememory "github.com/go-bumbu/userauth/service/throttle/store/memory"
 )
 
 type dummyUser struct {
@@ -113,6 +116,80 @@ func (st fakeUserStore) GetUser(_ string) (userauth.User, error) {
 
 func (st fakeUserStore) GetUserByLogin(loginID string) (userauth.User, error) {
 	return st.GetUser(loginID)
+}
+
+func TestThrottle(t *testing.T) {
+	newThrottled := func() *basicauth.AuthHandler {
+		return basicauth.NewThrottledHandler(dummyUser{}, "", false, &throttle.Backoff{
+			Store:        throttlememory.New(),
+			FreeFailures: 1,
+			BaseDelay:    time.Hour, // effectively "until the test ends"
+		}, nil)
+	}
+
+	t.Run("wrong passwords throttle even the correct one", func(t *testing.T) {
+		auth := newThrottled()
+		for i := 0; i < 2; i++ {
+			if loggedIn, _ := auth.HandleAuth(httptest.NewRecorder(), basicAuthReq("admin", "wrong")); loggedIn {
+				t.Fatal("wrong password must not log in")
+			}
+		}
+		if loggedIn, _ := auth.HandleAuth(httptest.NewRecorder(), basicAuthReq("admin", "admin")); loggedIn {
+			t.Fatal("throttled request must be a credential failure, even with correct credentials")
+		}
+	})
+
+	t.Run("unknown usernames throttle like existing ones", func(t *testing.T) {
+		auth := basicauth.NewThrottledHandler(fakeUserStore{err: userauth.ErrUserNotFound}, "", false, &throttle.Backoff{
+			Store:        throttlememory.New(),
+			FreeFailures: 1,
+			BaseDelay:    time.Hour,
+		}, nil)
+		respRec := httptest.NewRecorder()
+		for i := 0; i < 3; i++ {
+			if loggedIn, _ := auth.HandleAuth(respRec, basicAuthReq("ghost", "guess")); loggedIn {
+				t.Fatal("unknown user must not log in")
+			}
+		}
+		// throttled requests stay plain credential failures: no 5xx, no signal
+		if respRec.Result().StatusCode == http.StatusInternalServerError {
+			t.Fatal("throttling must not surface as an internal error")
+		}
+	})
+
+	t.Run("success resets the count", func(t *testing.T) {
+		// budget of 2: one failure leaves the account usable
+		auth := basicauth.NewThrottledHandler(dummyUser{}, "", false, &throttle.Backoff{
+			Store:        throttlememory.New(),
+			FreeFailures: 2,
+			BaseDelay:    time.Hour,
+		}, nil)
+		if loggedIn, _ := auth.HandleAuth(httptest.NewRecorder(), basicAuthReq("admin", "wrong")); loggedIn {
+			t.Fatal("wrong password must not log in")
+		}
+		if loggedIn, _ := auth.HandleAuth(httptest.NewRecorder(), basicAuthReq("admin", "admin")); !loggedIn {
+			t.Fatal("one failure is within the free budget; correct login should pass")
+		}
+		// the reset gives a fresh free failure
+		if loggedIn, _ := auth.HandleAuth(httptest.NewRecorder(), basicAuthReq("admin", "wrong")); loggedIn {
+			t.Fatal("wrong password must not log in")
+		}
+		if loggedIn, _ := auth.HandleAuth(httptest.NewRecorder(), basicAuthReq("admin", "admin")); !loggedIn {
+			t.Fatal("correct login after reset should pass")
+		}
+	})
+
+	t.Run("usernames throttle independently", func(t *testing.T) {
+		auth := newThrottled()
+		for i := 0; i < 2; i++ {
+			_, _ = auth.HandleAuth(httptest.NewRecorder(), basicAuthReq("admin", "wrong"))
+		}
+		// "admin" is throttled now, a different username is not (dummyUser
+		// treats every username as admin/admin, so "other" can still log in)
+		if loggedIn, _ := auth.HandleAuth(httptest.NewRecorder(), basicAuthReq("other", "admin")); !loggedIn {
+			t.Fatal("failures for one username must not throttle another")
+		}
+	})
 }
 
 func TestName(t *testing.T) {

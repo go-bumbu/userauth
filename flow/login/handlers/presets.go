@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/flow/login"
-	throttlememory "github.com/go-bumbu/userauth/flow/login/throttlestore/memory"
+	throttlememory "github.com/go-bumbu/userauth/service/throttle/store/memory"
 	"github.com/go-bumbu/userauth/service/verificationcode"
 )
 

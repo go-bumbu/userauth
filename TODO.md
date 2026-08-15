@@ -47,9 +47,11 @@ Items identified during a full architecture review of the library.
 - [x] **TOTP secret stored in plaintext**
   `TOTPData.Secret` is stored unencrypted in the DB. A compromised DB exposes every user's TOTP secret. Encrypt
   at rest with a server-side key.
-- [ ] **No rate limiting or brute-force protection hooks**
-  No interface for account lockout, login attempt tracking, or rate limiting. Provide at minimum a
-  `LoginAttemptRecorder` interface so consumers don't have to wrap `loginflow.Flow.Submit` themselves.
+- [x] **No rate limiting or brute-force protection hooks**
+  Addressed 2026-08 (`feat/brute-force-protection`): per-code attempt caps in `verificationcode.Service`,
+  verifier backoff for TOTP/recovery (`service/throttle.Backoff`), per-loginID `login.Guard` in `Flow.Submit`,
+  issuance rate limiting (`Flow.Resend`), and a throttled `basicauth`. Per-IP/volumetric limiting stays the
+  caller's/proxy's job. Still open: audit/event hooks so consumers can feed fail2ban/alerting.
 - [ ] **No CSRF protection**
   Left entirely to the consumer with no guidance or helpers.
 

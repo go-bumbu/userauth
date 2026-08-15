@@ -1,4 +1,4 @@
-// Package db provides a GORM-backed login.ThrottleStore. Failure state is
+// Package db provides a GORM-backed throttle.Store. Failure state is
 // stored in the login_throttle table, one row per user and method; it owns
 // its own model and auto-migration, independent from userdb.
 package db
