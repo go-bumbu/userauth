@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/examples"
+	"github.com/go-bumbu/userauth/demo/internal/mfa"
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/userdb"
 	"github.com/gorilla/mux"
@@ -14,7 +15,7 @@ import (
 
 // Section describes the login-flow examples for the demo index and mounts
 // them on the router.
-func Section(log *slog.Logger, static userauth.UserGetter, users *userdb.Store, rnd *web.Renderer) examples.Section {
+func Section(log *slog.Logger, static userauth.UserGetter, users *userdb.Store, mfaSvc mfa.Services, rnd *web.Renderer) examples.Section {
 	return examples.Section{
 		ID:    "login",
 		Title: "Login flows",
@@ -100,7 +101,7 @@ func Section(log *slog.Logger, static userauth.UserGetter, users *userdb.Store, 
 					{Text: "POST /api/login/verify", Desc: "second factor (totp / recovery)"},
 				},
 				Mount: func(r *mux.Router) {
-					api := API(log, users)
+					api := API(log, users, mfaSvc)
 					r.Path("/api/login").Methods(http.MethodPost).Handler(api.LoginHandler())
 					r.Path("/api/login/verify").Methods(http.MethodPost).Handler(api.VerifyHandler())
 				},

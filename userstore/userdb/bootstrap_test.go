@@ -208,7 +208,7 @@ func TestDelete(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := mng.SetRecoveryCodes(alice.ID, []string{hashutil.MustHashPassword("code1")}); err != nil {
+		if err := mng.RecoveryCodeStore().Replace(alice.ID, []string{hashutil.MustHashPassword("code1")}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -219,7 +219,7 @@ func TestDelete(t *testing.T) {
 		if _, err := mng.GetUserByLogin("alice"); !errors.Is(err, userauth.ErrUserNotFound) {
 			t.Errorf("want ErrUserNotFound, got %v", err)
 		}
-		if n, _ := mng.GetRecoveryCodesCount(alice.ID); n != 0 {
+		if n, _ := mng.RecoveryCodeStore().Count(alice.ID); n != 0 {
 			t.Errorf("want 0 recovery codes after delete, got %d", n)
 		}
 	})

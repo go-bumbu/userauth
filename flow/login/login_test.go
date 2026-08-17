@@ -11,6 +11,7 @@ import (
 	"github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
 	"github.com/go-bumbu/userauth/internal/hashutil"
 	throttlememory "github.com/go-bumbu/userauth/service/throttle/store/memory"
+	totpsvc "github.com/go-bumbu/userauth/service/totp"
 	"github.com/go-bumbu/userauth/service/verificationcode"
 	csmemory "github.com/go-bumbu/userauth/service/verificationcode/store/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
@@ -26,6 +27,16 @@ var totpSecret = func() string {
 	}
 	return key.Secret()
 }()
+
+// totpFactor adapts a read-only user store into the TOTP factor the engine
+// consumes; enrolment-capable stores pass a *totp.Service instead.
+func totpFactor(users *staticusers.Users) login.TOTPFactor {
+	v, err := totpsvc.FromGetter(users, 0)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
 
 // captureDeliverer records the last delivered code instead of sending it.
 type captureDeliverer struct {
@@ -74,7 +85,7 @@ func newFixture(policy login.Policy) *fixture {
 		Users: users,
 		Methods: []login.Method{
 			login.PasswordMethod{Users: users},
-			login.TOTPMethod{TOTP: users},
+			login.TOTPMethod{TOTP: totpFactor(users)},
 			login.EmailCodeMethod(codes, deliverer),
 		},
 		Policy:   policy,

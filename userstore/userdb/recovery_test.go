@@ -1,141 +1,116 @@
 package userdb
 
 import (
-	"fmt"
+	"slices"
 	"testing"
-
-	"github.com/go-bumbu/userauth/internal/hashutil"
 )
 
-// hashCodes bcrypt-hashes the given plain recovery codes.
-func hashCodes(t *testing.T, codes ...string) []string {
-	t.Helper()
-	out := make([]string, 0, len(codes))
-	for _, c := range codes {
-		h, err := hashutil.HashRecoveryCode(c)
-		if err != nil {
-			t.Fatal(err)
-		}
-		out = append(out, h)
-	}
-	return out
-}
-
-func TestSetRecoveryCodes(t *testing.T) {
+//nolint:gocyclo // one subtest per contract rule; splitting them hides the shared store setup
+func TestRecoveryCodeStore(t *testing.T) {
 	mng := setup(t)
 	defer clean()
 
 	userID := mustCreateUser(t, mng, "recovery-set-user")
+	store := mng.RecoveryCodeStore()
 
-	t.Run("rejects more than MaxRecoveryCodes", func(t *testing.T) {
-		codes := make([]string, MaxRecoveryCodes+1)
-		for i := range codes {
-			codes[i] = fmt.Sprintf("hash-%d", i)
-		}
-		if err := mng.SetRecoveryCodes(userID, codes); err == nil {
-			t.Error("expected error for too many recovery codes")
-		}
-	})
-
-	t.Run("stores codes and skips empty hashes", func(t *testing.T) {
-		hashed := hashCodes(t, "code-1", "code-2")
-		hashed = append(hashed, "") // empty hashes are skipped
-		if err := mng.SetRecoveryCodes(userID, hashed); err != nil {
+	t.Run("stores hashes and skips empty ones", func(t *testing.T) {
+		// an empty hash is not a code — storing one would create a row nothing
+		// can ever match
+		if err := store.Replace(userID, []string{"hash-1", "hash-2", ""}); err != nil {
 			t.Fatal(err)
 		}
-		count, err := mng.GetRecoveryCodesCount(userID)
+		count, err := store.Count(userID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if count != 2 {
-			t.Errorf("want 2 stored codes, got %d", count)
+			t.Errorf("stored %d codes, want 2", count)
 		}
-	})
-
-	t.Run("replaces all previous codes", func(t *testing.T) {
-		if err := mng.SetRecoveryCodes(userID, hashCodes(t, "new-code")); err != nil {
-			t.Fatal(err)
-		}
-		count, err := mng.GetRecoveryCodesCount(userID)
+		got, err := store.Hashes(userID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if count != 1 {
-			t.Errorf("want 1 stored code after replace, got %d", count)
-		}
-		if ok, _ := mng.VerifyRecoveryCode(userID, "code-1"); ok {
-			t.Error("old code should have been replaced")
+		slices.Sort(got)
+		if !slices.Equal(got, []string{"hash-1", "hash-2"}) {
+			t.Errorf("Hashes = %v, want [hash-1 hash-2]", got)
 		}
 	})
 
-	t.Run("empty slice removes all codes", func(t *testing.T) {
-		if err := mng.SetRecoveryCodes(userID, nil); err != nil {
+	t.Run("replace drops all previous codes", func(t *testing.T) {
+		if err := store.Replace(userID, []string{"new-hash"}); err != nil {
 			t.Fatal(err)
 		}
-		count, err := mng.GetRecoveryCodesCount(userID)
+		got, err := store.Hashes(userID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(got, []string{"new-hash"}) {
+			t.Errorf("Hashes = %v, want [new-hash]", got)
+		}
+	})
+
+	t.Run("nil clears every code", func(t *testing.T) {
+		if err := store.Replace(userID, nil); err != nil {
+			t.Fatal(err)
+		}
+		count, err := store.Count(userID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if count != 0 {
-			t.Errorf("want 0 stored codes, got %d", count)
-		}
-	})
-}
-
-func TestVerifyRecoveryCode(t *testing.T) {
-	mng := setup(t)
-	defer clean()
-
-	userID := mustCreateUser(t, mng, "recovery-verify-user")
-
-	if err := mng.SetRecoveryCodes(userID, hashCodes(t, "alpha", "beta")); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Run("wrong code fails", func(t *testing.T) {
-		ok, err := mng.VerifyRecoveryCode(userID, "wrong")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if ok {
-			t.Error("expected verification failure for wrong code")
+			t.Errorf("stored %d codes after clearing, want 0", count)
 		}
 	})
 
-	t.Run("valid code succeeds and is consumed", func(t *testing.T) {
-		ok, err := mng.VerifyRecoveryCode(userID, "alpha")
+	t.Run("delete consumes one code", func(t *testing.T) {
+		if err := store.Replace(userID, []string{"h1", "h2"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Delete(userID, "h1"); err != nil {
+			t.Fatal(err)
+		}
+		got, err := store.Hashes(userID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !ok {
-			t.Fatal("expected verification success")
+		if !slices.Equal(got, []string{"h2"}) {
+			t.Errorf("Hashes after Delete = %v, want [h2]", got)
 		}
-		// consumed: same code fails a second time
-		ok, err = mng.VerifyRecoveryCode(userID, "alpha")
-		if err != nil {
+		// deleting something that is not there is not an error
+		if err := store.Delete(userID, "h1"); err != nil {
+			t.Errorf("Delete of a consumed code: %v", err)
+		}
+	})
+
+	t.Run("codes of other users are untouched", func(t *testing.T) {
+		otherID := mustCreateUser(t, mng, "recovery-other-user")
+		if err := store.Replace(userID, []string{"shared"}); err != nil {
 			t.Fatal(err)
 		}
-		if ok {
-			t.Error("expected code to be consumed after first use")
+		if err := store.Replace(otherID, []string{"shared"}); err != nil {
+			t.Fatal(err)
 		}
-		// the other code is still usable
-		count, err := mng.GetRecoveryCodesCount(userID)
+		// the same hash value for two users must be independent
+		if err := store.Delete(userID, "shared"); err != nil {
+			t.Fatal(err)
+		}
+		count, err := store.Count(otherID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if count != 1 {
-			t.Errorf("want 1 remaining code, got %d", count)
+			t.Errorf("other user has %d codes, want 1", count)
 		}
 	})
 
-	t.Run("user with no codes fails", func(t *testing.T) {
-		otherID := mustCreateUser(t, mng, "recovery-empty-user")
-		ok, err := mng.VerifyRecoveryCode(otherID, "alpha")
+	t.Run("user with no codes reports none", func(t *testing.T) {
+		emptyID := mustCreateUser(t, mng, "recovery-empty-user")
+		got, err := store.Hashes(emptyID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if ok {
-			t.Error("expected verification failure for user with no codes")
+		if len(got) != 0 {
+			t.Errorf("Hashes = %v, want empty", got)
 		}
 	})
 }

@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/internal/hashutil"
+	totpsvc "github.com/go-bumbu/userauth/service/totp"
 	"github.com/go-bumbu/userauth/service/verificationcode"
-	"github.com/pquerna/otp/totp"
 )
 
 // Well-known method IDs. Policies and transports refer to methods by these
@@ -67,28 +67,36 @@ func (m PasswordMethod) Verify(userID, input string) (bool, error) {
 
 // --- totp ---
 
-// TOTPMethod verifies an authenticator-app code.
+// TOTPFactor is the authenticator-app factor this engine consumes; alias of
+// service/totp.Verifier. *totp.Service implements it, and totp.FromGetter
+// adapts read-only stores that expose a secret through userauth.TOTPGetter.
+type TOTPFactor = totpsvc.Verifier
+
+// TOTPMethod verifies an authenticator-app code. Code validation and enrolment
+// state live in service/totp; this type only adds the throttle.
 //
 // Throttle should always be set outside of tests: TOTP codes are 6 digits, so
 // without verifier-side throttling the keyspace is brute-forceable within a
 // code's validity window (RFC 6238 §5.2 requires the throttle).
 type TOTPMethod struct {
-	TOTP     userauth.TOTPGetter
+	TOTP     TOTPFactor
 	Throttle *Throttle
 }
 
 func (m TOTPMethod) ID() string { return MethodTOTP }
 
 func (m TOTPMethod) Verify(userID, input string) (bool, error) {
-	data, err := m.TOTP.GetTOTP(userID)
+	// the enrolment check happens inside the verifier, so a user without TOTP
+	// costs no throttle budget
+	enabled, err := m.TOTP.Enabled(userID)
 	if err != nil {
 		return false, err
 	}
-	if !data.Enabled {
+	if !enabled {
 		return false, nil
 	}
 	return throttled(m.Throttle, userID, MethodTOTP, func() (bool, error) {
-		return totp.Validate(input, data.Secret), nil
+		return m.TOTP.Verify(userID, input)
 	})
 }
 

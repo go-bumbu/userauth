@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/demo/internal/mfa"
 	"github.com/go-bumbu/userauth/demo/router"
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
@@ -31,9 +31,15 @@ func main() {
 		{Id: "demo", HashPw: userauth.MustHashPassword("demo"), Enabled: true},
 	}}
 
+	mfaSvc, err := mfa.New(logger, users)
+	if err != nil {
+		panic(fmt.Errorf("init second factors: %w", err))
+	}
+
 	handler := router.New(router.Cfg{
 		Logger:      logger,
 		Users:       users,
+		MFA:         mfaSvc,
 		StaticUsers: staticUsers,
 		Web:         web.New(),
 	})
@@ -69,14 +75,9 @@ func newUserStore() (*userdb.Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open in-memory sqlite: %w", err)
 	}
-	totpKey := make([]byte, 32)
-	if _, err := rand.Read(totpKey); err != nil {
-		return nil, fmt.Errorf("generate TOTP encryption key: %w", err)
-	}
 	mgr, err := userdb.New(db, userdb.Opts{
-		BcryptDifficulty:  4,
-		DefaultEnabled:    true,
-		TOTPEncryptionKey: totpKey,
+		BcryptDifficulty: 4,
+		DefaultEnabled:   true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create db store: %w", err)

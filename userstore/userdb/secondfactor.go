@@ -7,11 +7,11 @@ import (
 // AvailableSecondFactors implements userauth.SecondFactorProvider.
 func (s Store) AvailableSecondFactors(userID string) ([]userauth.SecondFactor, error) {
 	var out []userauth.SecondFactor
-	totpData, err := s.GetTOTP(userID)
+	totpOn, err := s.totpEnabled(userID)
 	if err != nil {
 		return nil, err
 	}
-	if totpData.Enabled {
+	if totpOn {
 		out = append(out, userauth.SecondFactorTOTP)
 	}
 	emailEnabled, err := s.emailCodeEnabled(userID)

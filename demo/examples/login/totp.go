@@ -13,6 +13,7 @@ import (
 	"github.com/go-bumbu/userauth/demo/web"
 	loginflow "github.com/go-bumbu/userauth/flow/login"
 	flowmemory "github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
+	totpsvc "github.com/go-bumbu/userauth/service/totp"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
@@ -59,12 +60,20 @@ func TOTP(log *slog.Logger, rnd *web.Renderer) http.Handler {
 		panic(fmt.Errorf("totp: session manager: %w", err))
 	}
 
+	// static users carry their secret in the file and have no enrolment
+	// lifecycle, so the read-only adapter is the right fit here (the profile
+	// example uses the full service instead)
+	totpFactor, err := totpsvc.FromGetter(users, 0)
+	if err != nil {
+		panic(fmt.Errorf("totp: verifier: %w", err))
+	}
+
 	app := &totpLoginApp{rnd: rnd}
 	app.flow = &loginflow.Flow{
 		Users: users,
 		Methods: []loginflow.Method{
 			loginflow.PasswordMethod{Users: users},
-			loginflow.TOTPMethod{TOTP: users},
+			loginflow.TOTPMethod{TOTP: totpFactor},
 		},
 		Policy:   loginflow.RequireAny(loginflow.Chain{loginflow.MethodPassword, loginflow.MethodTOTP}),
 		Attempts: flowmemory.New(),

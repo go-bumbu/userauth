@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/auth/cookieauth"
+	"github.com/go-bumbu/userauth/demo/internal/mfa"
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/flow/login"
 	flowmemory "github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
@@ -28,6 +29,7 @@ import (
 type app struct {
 	log     *slog.Logger
 	users   *userdb.Store
+	mfa     mfa.Services
 	rnd     *web.Renderer
 	sessMgr *cookieauth.Manager
 	flow    *login.Flow
@@ -37,7 +39,7 @@ type app struct {
 // New demonstrates an authenticated self-service area backed by the
 // userdb.Store: cookie-session password login with an optional TOTP second
 // factor and recovery codes, plus password, email, and two-factor management.
-func New(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Handler {
+func New(log *slog.Logger, users *userdb.Store, mfaSvc mfa.Services, rnd *web.Renderer) http.Handler {
 	sesStore, err := cookieauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
 	if err != nil {
 		panic(fmt.Errorf("profile: error instantiating cookie store: %v", err))
@@ -62,11 +64,11 @@ func New(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Handler 
 		if !slices.Contains(satisfied, login.MethodPassword) {
 			return false, []string{login.MethodPassword}, nil
 		}
-		totpData, err := users.GetTOTP(user.ID)
+		totpOn, err := mfaSvc.TOTP.Enabled(user.ID)
 		if err != nil {
 			return false, nil, err
 		}
-		if !totpData.Enabled ||
+		if !totpOn ||
 			slices.Contains(satisfied, login.MethodTOTP) ||
 			slices.Contains(satisfied, login.MethodRecovery) {
 			return true, nil, nil
@@ -82,14 +84,15 @@ func New(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) http.Handler 
 	a := &app{
 		log:     log,
 		users:   users,
+		mfa:     mfaSvc,
 		rnd:     rnd,
 		sessMgr: sessMgr,
 		flow: &login.Flow{
 			Users: users,
 			Methods: []login.Method{
 				login.PasswordMethod{Users: users},
-				login.TOTPMethod{TOTP: users},
-				login.RecoveryMethod{Codes: users},
+				login.TOTPMethod{TOTP: mfaSvc.TOTP},
+				login.RecoveryMethod{Codes: mfaSvc.Recovery},
 			},
 			Policy:   policy,
 			Attempts: flowmemory.New(),
@@ -152,15 +155,15 @@ func (a *app) viewWithMsg(w http.ResponseWriter, r *http.Request, success, errMs
 		http.Error(w, "user not found", http.StatusInternalServerError)
 		return
 	}
-	totpData, _ := a.users.GetTOTP(user.ID)
-	recoveryCount, _ := a.users.GetRecoveryCodesCount(user.ID)
+	totpEnabled, _ := a.mfa.TOTP.Enabled(user.ID)
+	recoveryCount, _ := a.mfa.Recovery.Remaining(user.ID)
 	a.rnd.Render(w, r, "profile.tmpl.html", map[string]any{
 		"UserID":        user.LoginID,
 		"Email":         user.PrimaryEmail,
 		"Enabled":       user.Enabled,
 		"Success":       success,
 		"Error":         errMsg,
-		"TOTPEnabled":   totpData.Enabled,
+		"TOTPEnabled":   totpEnabled,
 		"RecoveryCount": recoveryCount,
 	})
 }

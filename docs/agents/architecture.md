@@ -32,6 +32,11 @@ service/verificationcode/  shared one-time-code service: Service, CodeStore, Cod
   store/memory/            Deliverer, with its own store/ and deliver/{smtp,file} adapters
 service/throttle/        brute-force backoff policy: Backoff + Store, consumed by the
   store/{memory,db}/       login engine (verifier throttle, guard, resend limit) and basicauth
+service/totp/            authenticator-app service: enrolment, validation, secret
+  store/memory/            encryption at rest; Store + Verifier, storetest/ conformance suite
+service/recoverycodes/   one-time recovery code service: generation, bcrypt hashing,
+  store/memory/            single-use consumption; Store, storetest/ conformance suite
+service/cipher/          Secret interface + single-key AESGCM, shared by pat and totp
 internal/hashutil/       crypto plumbing (bcrypt, SHA-256, AES-GCM) — not public API
 demo/                    consumer of the library; never imported by it
 ```
@@ -78,9 +83,11 @@ Placement rules (they generated this tree; new packages should follow them):
   satisfies `UserLogin` implicitly).
 - **Read/write split**: login uses read-only interfaces (`UserGetter`,
   `TOTPGetter`, `RecoveryCodeVerifier`, `CodeVerifier`, `SecondFactorProvider`);
-  configuration uses separate write interfaces (`TOTPConfigurator`,
-  `RecoveryCodeConfigurator`, `UserRegistrar`, `UserUpdater`) so read-only
-  stores can still participate in login.
+  user configuration uses separate write interfaces (`UserRegistrar`,
+  `UserUpdater`) so read-only stores can still participate in login. Credential
+  *lifecycles* (TOTP enrolment, recovery codes, PATs, verification codes) are
+  not store interfaces at all — they are services with their own persistence
+  interfaces.
 - **Transport-agnostic core**: the login engine works on user IDs,
   passwords and codes; HTTP lives in transports (`flow/login/handlers`).
 
@@ -111,6 +118,59 @@ lookup (enabled check at verify time) to a `userauth.UserGetter`.
 - **`ParseToken`** splits the wire format into its three segments; **`finishVerify`**
   is the shared tail of `Verify` and `VerifyMatch` (expiry, owner lookup and
   enabled flag, throttled last-used touch).
+
+## TOTP and recovery codes: service = policy, store = persistence
+
+Restructured 2026-08 (`feat/totp-service`). Before it, TOTP was split across three
+layers: enrolment lived in the demo, secret encryption in `userdb`, and code
+validation in `flow/login`. Now:
+
+- **`service/totp` owns everything about the authenticator factor**: secret
+  generation, the `otpauth://` URI, the enrolment ceremony, code validation
+  (30s period, 6 digits, `Opts.Skew` periods of drift, default 1), and
+  encryption of the secret at rest via `Opts.Cipher`.
+  - Enrolment is two-phase on purpose: `Enroll` stores the secret **disabled**,
+    and only `Confirm` (a working code) enables it — a user who abandons setup is
+    never locked into a secret they cannot produce codes for. `Pending` re-renders
+    an unconfirmed enrolment so a reloaded setup page keeps the same QR.
+  - `Disable` **deletes** the record rather than flagging it off: a disabled
+    factor that keeps its secret is a credential nobody is watching.
+  - `Verify` returns `(false, nil)` for wrong code / pending / not enrolled, and
+    reserves errors for store and cipher failures, so a policy can call it
+    blindly without turning a missing factor into a 500.
+  - `QRPNG(uri, size)` renders the URI as a PNG; it validates the `otpauth`
+    scheme itself because `otp.NewKeyFromURL` accepts almost anything.
+  - `FromGetter(userauth.TOTPGetter, skew)` adapts read-only stores
+    (`staticusers`) that hold a secret and have no enrolment lifecycle.
+- **`service/recoverycodes` owns the recovery factor**: generation, bcrypt
+  hashing, how many a user gets (`Opts.Count`, default 6, max 20 — verification
+  cost is linear in the count), and single-use consumption. `Issue` replaces the
+  whole set, so it doubles as regenerate. It implements
+  `userauth.RecoveryCodeVerifier`, so `login.RecoveryMethod` consumes it
+  unchanged.
+- **Both `Store` interfaces are pure persistence** and see only opaque strings:
+  `totp.Store` is Get/Set/Delete over a `Record{Secret, KeyID, Enabled}`;
+  `recoverycodes.Store` is Replace/Hashes/Delete/Count over bcrypt hashes (the
+  service compares and then deletes the matching hash — the store never compares).
+  In-memory implementations live under each `store/memory`, the GORM ones are
+  `userdb.TOTPStore()` / `userdb.RecoveryCodeStore()`, and both are held to the
+  same `storetest.Run` conformance suite.
+- **Encryption moved from `userdb` into the service** (`Opts.Cipher`,
+  `service/cipher`). Compatibility: the AEAD context is empty, matching the old
+  `hashutil.Encrypt(secret, key, nil)` call, and `cipher.AESGCM.Decrypt` treats an
+  empty stored key id as "my key" — so rows written before the `key_id` column
+  existed still decrypt. Moving the key is a **config change, no data migration**;
+  `userdb.Opts.TOTPEncryptionKey` is gone. Guarded by
+  `TestTOTPSecretsEncryptedBeforeTheServiceOwnedTheCipher`.
+- **Throttling stayed out of both services.** The shared `service/throttle`
+  backoff is applied by `login.TOTPMethod` / `RecoveryMethod`, so all
+  small-keyspace factors escalate together. `TOTPMethod` checks `Enabled` before
+  entering the throttle, so a user without TOTP costs no backoff budget.
+- **The write-side root interfaces are gone**: `TOTPConfigurator`,
+  `RecoveryCodeConfigurator` and `RecoveryCodeCountGetter` were removed — enrolment
+  and issuance are policy, so they live behind the services' own store
+  interfaces. `TOTPData` / `TOTPGetter` remain for read-only stores, and
+  `RecoveryCodeVerifier` remains as the login-side interface.
 
 ## Verification codes: service = policy, store = persistence
 
@@ -149,8 +209,8 @@ root package in the 2026-08-03 restructure): `Service`, `CodeStore`,
 
 | Store | Package | Implements | Storage |
 |---|---|---|---|
-| Static users | `userstore/staticusers` | `UserGetter`, `TOTPGetter`, `RecoveryCodeVerifier`, `SecondFactorProvider` | In-memory from YAML/JSON, read-only |
-| DB users | `userstore/userdb` | All read interfaces + `TOTPConfigurator`, `RecoveryCodeConfigurator`, `RecoveryCodeCountGetter`, `UserUpdater`, `UserRegistrar` (`Create`) | GORM (+SQLite in tests/demo) |
+| Static users | `userstore/staticusers` | `UserGetter`, `TOTPGetter` (wrap in `totp.FromGetter`), `RecoveryCodeVerifier`, `SecondFactorProvider` | In-memory from YAML/JSON, read-only |
+| DB users | `userstore/userdb` | All read interfaces + `UserUpdater`, `UserRegistrar` (`Create`); MFA persistence via `TOTPStore()`, `RecoveryCodeStore()`, `PATStore()` | GORM (+SQLite in tests/demo) |
 
 The DB store was refactored 2026-06-30
 (`../superpowers/specs/2026-06-30-dbuser-refactor-design.md`): package
@@ -162,7 +222,8 @@ ordered by `login_id ASC`, returns `Total`). Note: the spec named the package
 `dbuser`; it has since been renamed again to **`userdb`** — the spec's naming is
 stale, the structure is not.
 
-`userdb` tables: `user_models`, `user_totp`, `user_recovery_codes`,
+`userdb` tables: `user_models`, `user_totp` (secret + `key_id` + enabled),
+`user_recovery_codes`,
 `user_email_verification_codes`, `user_sms_verification_codes`,
 `user_second_factor_flags`, `user_pending_email_changes`. Schema auto-migrates
 in `New`, which also validates the TOTP encryption key length.
@@ -173,8 +234,9 @@ in `New`, which also validates the TOTP encryption key length.
   (recovery codes moved off SHA-256 deliberately; see TODO.md review items).
 - **Verification codes: SHA-256** — short-lived (10 min default), needs
   deterministic lookup for the store's consume-by-hash.
-- **TOTP secrets: optional AES-256-GCM at rest** with a server-side key
-  (validated in `userdb.New`).
+- **TOTP secrets: optional AES-256-GCM at rest**, owned by `service/totp` via
+  `Opts.Cipher` (`service/cipher.AESGCM` validates the 32-byte key). The store
+  keeps ciphertext plus the key id and never decrypts.
 
 ## Session lifecycle (`auth/cookieauth.Manager`)
 

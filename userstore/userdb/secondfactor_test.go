@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/service/totp"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -31,7 +32,7 @@ func TestAvailableSecondFactors(t *testing.T) {
 	})
 
 	t.Run("totp enabled", func(t *testing.T) {
-		if err := mng.SetTOTP(userID, userauth.TOTPData{Enabled: true, Secret: demoTOTPSecret}); err != nil {
+		if err := mng.TOTPStore().Set(userID, totp.Record{Enabled: true, Secret: demoTOTPSecret}); err != nil {
 			t.Fatal(err)
 		}
 		assertFactors(t, []userauth.SecondFactor{userauth.SecondFactorTOTP})
@@ -54,7 +55,7 @@ func TestAvailableSecondFactors(t *testing.T) {
 	})
 
 	t.Run("totp disabled leaves email and sms", func(t *testing.T) {
-		if err := mng.SetTOTP(userID, userauth.TOTPData{Enabled: false, Secret: demoTOTPSecret}); err != nil {
+		if err := mng.TOTPStore().Set(userID, totp.Record{Enabled: false, Secret: demoTOTPSecret}); err != nil {
 			t.Fatal(err)
 		}
 		assertFactors(t, []userauth.SecondFactor{userauth.SecondFactorEmail, userauth.SecondFactorSMS})

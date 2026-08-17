@@ -39,10 +39,14 @@ check here and in TODO.md — several gaps are known and have a chosen direction
 
 | Feature | Status | Notes |
 |---|---|---|
-| TOTP (authenticator app) | Implemented | `TOTPGetter` (read) / `TOTPConfigurator` (write); both stores implement read; secrets optionally AES-256-GCM at rest |
-| Recovery codes | Implemented | one-time, bcrypt-hashed, max 6 per user in `userdb`; `VerifyRecoveryCode` consumes atomically |
+| TOTP (authenticator app) | Implemented | `service/totp` — enrolment (`Enroll`/`Confirm`/`Pending`/`Disable`), validation (`Verify`, `Opts.Skew`), `otpauth://` URI + `QRPNG`, secrets optionally AES-256-GCM at rest via `Opts.Cipher`. Stores: `store/memory`, `userdb.TOTPStore()`. Read-only stores adapt with `totp.FromGetter` |
+| Recovery codes | Implemented | `service/recoverycodes` — `Issue` (default 6, bcrypt-hashed, plaintext once), `VerifyRecoveryCode` (single use), `Remaining`, `Clear`. Stores: `store/memory`, `userdb.RecoveryCodeStore()` |
 | Email 2FA | Partial | store layer complete in `userdb` (`VerifyEmailCode`, `email_code_enabled` flag); consumer must wire delivery + frontend |
 | SMS 2FA | Partial | same shape: `VerifySMSCode`, `sms_code_enabled`; same missing consumer wiring |
+
+TOTP enrolment ships as a service, not as HTTP handlers: the ceremony is
+session-authenticated self-service, so the transport stays with the consumer —
+see `demo/examples/profile/totp.go` for the four-handler pattern.
 
 `SecondFactorProvider.AvailableSecondFactors` (implemented by both stores)
 feeds the `SecondFactorAfter` policy: it reports which of totp/email/sms a user

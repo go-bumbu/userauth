@@ -93,6 +93,11 @@ Items identified during a full architecture review of the library.
 - [x] **Email/SMS code generation lives in `dbusers`**
   `GenerateEmailVerificationCode` and `GenerateSMSVerificationCode` are methods on `DbManager`. Code generation
   is domain logic (length, expiry, charset), not storage logic. Move to core or a dedicated service.
+- [x] **TOTP enrolment lived in the demo, TOTP/recovery crypto lived in `userdb`**
+  Addressed 2026-08: `service/totp` (enrolment, validation, secret encryption via `Opts.Cipher`) and
+  `service/recoverycodes` (generation, bcrypt hashing, single-use consumption) own the policy; `userdb` exposes
+  `TOTPStore()` / `RecoveryCodeStore()` as pure persistence and the write-side root interfaces were removed.
+  The AES cipher shared with `service/pat` moved to `service/cipher`.
 - [ ] **`dbusers` is coupled to GORM**
   No storage interface at the `userauth` package level. If you want raw SQL or a different ORM, you must rewrite
   the entire store. Define a persistence interface in core. Note: the actual SQL used is portable GORM (no
@@ -116,3 +121,119 @@ Items identified during a full architecture review of the library.
   this asymmetry is right once real consumers exist (PAT design, 2026-08-06).
 - [ ] OAuth2 / OIDC provider support
 - [ ] Graceful bcrypt cost migration on login
+
+---
+
+## Move to services (2026-08-17 review)
+
+Where policy still lives in the wrong layer, found by reviewing what remains after
+`service/totp` + `service/recoverycodes` landed. The pattern to follow is
+established three times now (`pat`, `verificationcode`, `totp`): **the service owns
+policy and crypto, the store is pure persistence behind a narrow interface, and a
+`storetest` conformance suite holds every implementation to the same contract** —
+see `docs/agents/architecture.md`.
+
+Ordered by value. The first two are refactors of existing behaviour; the third is a
+new capability and deserves its own design pass.
+
+### 1. Finish the `verificationcode.CodeStore` adapter in `userdb` (phase 2)
+
+Not a new service — the missing store adapter for the existing one. **This is the
+only item here that closes a live security gap.**
+
+- `userdb.VerifyEmailCode` / `VerifySMSCode` (`userstore/userdb/email.go:49`,
+  `sms.go:48`) hash the submitted code themselves and **never count attempts**:
+  `emailVerificationCodeModel` / `smsVerificationCodeModel` have no attempts
+  column. A 6-digit code is therefore freely guessable for its whole 10-minute
+  life on the DB path, while the `verificationcode.Service` path caps it. Codes are
+  short — the attempt cap is what makes them non-brute-forceable.
+- Those methods also do not satisfy `verificationcode.CodeVerifier`, so consumers
+  on `userdb` cannot use the login `CodeMethod` / register `EmailCheck` presets and
+  fall back to the uncapped path.
+- Work: `userdb.EmailCodeStore()` / `SMSCodeStore()` returning
+  `verificationcode.CodeStore`, an `attempts` column, atomic consume-or-count,
+  then delete `StoreEmailCode`, `VerifyEmailCode`, `StoreSMSCode`, `VerifySMSCode`.
+- Add the missing `service/verificationcode/storetest` conformance suite while
+  doing it, and run it against `store/memory` **and** the new adapters — the
+  attempt-cap rule is exactly the kind of contract a suite must pin.
+- **Design question this forces**: TOTP enrolment state now belongs to
+  `service/totp`, but email/SMS 2FA enrolment state is still
+  `secondFactorFlagsModel` + `SetEmailCodeEnabled` / `SetSMSCodeEnabled` in the
+  store. Resolve the asymmetry deliberately — either the flags move behind the
+  code service, or document why "channel enabled" is user data rather than
+  factor state.
+
+### 2. `service/password` — password crypto and policy are split five ways
+
+Genuine new-service candidate, small and high-leverage. Today:
+
+| Site | What it does |
+|---|---|
+| `userstore/userdb/user.go:67` | `bcrypt.GenerateFromPassword(pw, s.bcryptDifficulty)` — store-configured cost |
+| `flow/register/register.go:296` | `hashutil.HashPassword` — **`bcrypt.DefaultCost`, ignoring the store's cost** |
+| `demo/examples/profile/profile.go:204` | `userauth.HashPassword` — DefaultCost again |
+| `flow/login/methods.go:60` | `hashutil.VerifyPassword` |
+| `auth/basicauth/basicauth.go:147` | `hashutil.VerifyPassword` (duplicated) |
+
+- Concrete bug: a store configured with cost 12 gets **cost-10 hashes** from
+  self-registration. Nothing keeps the two in step.
+- `userdb.SetPasswordHash` takes a hash, so every consumer hashes for itself (the
+  demo does), and `PasswordValidator` (`flow/register/register.go:93`) is wired
+  into the register flow only — `userdb.Create` stays unhooked.
+- A service owning algorithm + cost, `Hash`, `Verify`, `ValidatePolicy` and
+  **rehash-on-successful-verify** closes four open items above at once: password
+  policy enforcement, graceful bcrypt cost migration (listed twice), swallowed
+  password-verification errors (verify can return a reason instead of
+  `false, nil` for both wrong password and corrupt hash), and part of the
+  `dbusers`-coupling item.
+- The store keeps `HashPw` on `userauth.User` (read) and a hash-setter (write);
+  the service sits between them and is the only thing that picks a cost.
+
+### 3. `service/session` — session registry (biggest missing capability)
+
+- `cookieauth.Manager` (`auth/cookieauth/cookie.go:38`) is a per-request
+  authenticator over `gorilla/sessions` with three time windows but **no
+  registry**: no listing active sessions, no revoking one, no revoke-all. Also no
+  device / IP / user-agent / last-active metadata. Both are listed under
+  *Session Management* above.
+- Boundary: `cookieauth` stays transport + validation; the service owns session
+  records behind its own `Store`. Do not fold the registry into the authenticator.
+- Largest item here: `gorilla/sessions`' store interface cannot enumerate, so this
+  needs a real session store (already noted under *session store* at the top).
+- Pairs with #2 — revoke-all-sessions is what a password change should trigger.
+
+### Belongs in a flow, not a service
+
+- [ ] **Pending email change** — `userdb.StorePendingEmailChange` /
+  `GetPendingEmailChange` / `VerifyPendingEmailChange` (`userstore/userdb/email.go:70-119`)
+  re-implement SHA-256 code hashing and expiry that `verificationcode` already
+  owns. The fix is a multi-step flow (request → verify → apply) composing
+  `verificationcode`, plus **stop hashing in the store**. By the placement rules
+  multi-step ⇒ `flow/`.
+- [ ] **Password reset / account recovery** (open item above) — `flow/passwordreset`
+  composing `verificationcode` for the code and `service/password` (#2) for the
+  new hash. Not a service.
+
+### Explicitly *not* services
+
+Recorded so the next pass does not re-litigate them:
+
+- **Audit / event hooks** (open item above) — a thin `EventListener` / `Recorder`
+  interface consumed by the engines. No policy, no store: a service here would be
+  pure ceremony.
+- **Groups** (`userstore/userdb/groups.go`) — identity facts, never policy; what a
+  membership permits is the consuming application's business.
+- **`userdb.List` pagination**, **`staticusers`**, and
+  **`AvailableSecondFactors`** — storage, read-only data, and a derived read
+  respectively. Nothing to extract.
+- **`login.AttemptStore` / `register.PendingStore`** — correctly engine-scoped;
+  their real problem is the HTTP leak listed under *Design & Coupling*.
+
+### Placement judgment call
+
+- [ ] **`flow/register/invite` → `service/invite`?** It is already
+  `Service` + `Store` + `Opts` with two backends (`flow/register/invite/invite.go:64-158`),
+  i.e. service-shaped, and is nested only because registration is its single
+  consumer. Placement rule 4 says multiple consumers ⇒ top level, so move it when
+  a second consumer appears (an admin UI issuing invites, or a second flow) — not
+  before.

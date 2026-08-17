@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-bumbu/userauth/demo/examples"
+	"github.com/go-bumbu/userauth/demo/internal/mfa"
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/userdb"
 	"github.com/gorilla/mux"
@@ -13,7 +14,7 @@ import (
 
 // Section describes the profile self-service example for the demo index and
 // mounts it on the router.
-func Section(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) examples.Section {
+func Section(log *slog.Logger, users *userdb.Store, mfaSvc mfa.Services, rnd *web.Renderer) examples.Section {
 	return examples.Section{
 		ID:    "profile",
 		Title: "Profile",
@@ -38,7 +39,7 @@ func Section(log *slog.Logger, users *userdb.Store, rnd *web.Renderer) examples.
 					{Href: "/profile/pat", Text: "/profile/pat", Desc: "create and revoke personal access tokens"},
 				},
 				Mount: func(r *mux.Router) {
-					r.PathPrefix("/profile/").Handler(http.StripPrefix("/profile", New(log, users, rnd)))
+					r.PathPrefix("/profile/").Handler(http.StripPrefix("/profile", New(log, users, mfaSvc, rnd)))
 				},
 			},
 		},

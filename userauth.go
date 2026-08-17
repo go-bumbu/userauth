@@ -84,6 +84,10 @@ type UserGetter interface {
 	GetUserByLogin(loginID string) (User, error)
 }
 
+// TOTPData is a user's authenticator-app state as a read-only store reports it.
+// Stores that own an enrolment lifecycle do not use this: they persist through
+// service/totp.Store and the service owns generation, confirmation, and
+// encryption at rest.
 type TOTPData struct {
 	Enabled bool
 	Secret  string // the shared secret for TOTP generation
@@ -104,12 +108,17 @@ type SecondFactorProvider interface {
 	AvailableSecondFactors(userID string) ([]SecondFactor, error)
 }
 
-// TOTPGetter is the read-only interface for TOTP 2FA (authenticator app). loginflow.TOTPMethod uses this for TOTP verification.
+// TOTPGetter is the read-only interface for TOTP 2FA (authenticator app),
+// implemented by stores whose secrets are provisioned out of band (e.g.
+// userstore/staticusers). Wrap one in totp.FromGetter to use it as a login
+// factor; stores with an enrolment lifecycle go through service/totp instead.
 type TOTPGetter interface {
 	GetTOTP(userID string) (TOTPData, error)
 }
 
-// RecoveryCodeVerifier verifies a recovery code at login. Separate from TOTP; stores may implement one or both.
+// RecoveryCodeVerifier verifies a recovery code at login, consuming it on
+// success. Separate from TOTP: recovery codes can back any primary factor.
+// *recoverycodes.Service implements it.
 type RecoveryCodeVerifier interface {
 	VerifyRecoveryCode(userID, code string) (bool, error)
 }
@@ -127,22 +136,10 @@ type UserUpdater interface {
 	SetEnabled(userID string, enabled bool) error
 }
 
-// TOTPConfigurator can read and write TOTP for a user. Stores that support TOTP setup/disable implement this.
-type TOTPConfigurator interface {
-	TOTPGetter
-	SetTOTP(userID string, data TOTPData) error
-}
-
-// RecoveryCodeConfigurator can write recovery codes for a user. Stores that support recovery code setup implement this.
-type RecoveryCodeConfigurator interface {
-	// SetRecoveryCodes replaces all recovery codes for the user with the given bcrypt-hashed codes (from hashutil.HashRecoveryCode).
-	SetRecoveryCodes(userID string, hashedCodes []string) error
-}
-
-// RecoveryCodeCountGetter returns the number of remaining (unused) recovery codes for a user.
-type RecoveryCodeCountGetter interface {
-	GetRecoveryCodesCount(userID string) (int, error)
-}
+// The write side of TOTP and recovery codes is not a store interface: enrolment
+// and code issuance are policy (secret generation, confirmation, hashing, how
+// many codes a user gets), so they live in service/totp and
+// service/recoverycodes, each with its own persistence interface.
 
 // ErrUserNotFound is thrown when a user is not found
 var ErrUserNotFound = errors.New("user not found")

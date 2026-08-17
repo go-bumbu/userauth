@@ -10,6 +10,7 @@ import (
 	"github.com/go-bumbu/userauth/flow/login"
 	"github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
 	"github.com/go-bumbu/userauth/internal/hashutil"
+	totpsvc "github.com/go-bumbu/userauth/service/totp"
 	"github.com/go-bumbu/userauth/service/verificationcode"
 	csmemory "github.com/go-bumbu/userauth/service/verificationcode/store/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
@@ -79,11 +80,16 @@ func Example_emailPlusTOTP() {
 	codes := verificationcode.NewService(csmemory.New(), verificationcode.Opts{})
 	mail := &printDeliverer{}
 
+	// static users hold the secret themselves; FromGetter turns any
+	// userauth.TOTPGetter into the factor the engine consumes (stores with an
+	// enrolment lifecycle pass a *totp.Service instead)
+	totpFactor, _ := totpsvc.FromGetter(users, 0)
+
 	flow := &login.Flow{
 		Users: users,
 		Methods: []login.Method{
 			login.EmailCodeMethod(codes, mail),
-			login.TOTPMethod{TOTP: users},
+			login.TOTPMethod{TOTP: totpFactor},
 		},
 		Policy:   login.RequireAny(login.Chain{login.MethodEmail, login.MethodTOTP}),
 		Attempts: memory.New(),
@@ -124,11 +130,16 @@ func Example_alternativeChains() {
 	codes := verificationcode.NewService(csmemory.New(), verificationcode.Opts{})
 	mail := &printDeliverer{}
 
+	// static users hold the secret themselves; FromGetter turns any
+	// userauth.TOTPGetter into the factor the engine consumes (stores with an
+	// enrolment lifecycle pass a *totp.Service instead)
+	totpFactor, _ := totpsvc.FromGetter(users, 0)
+
 	flow := &login.Flow{
 		Users: users,
 		Methods: []login.Method{
 			login.PasswordMethod{Users: users},
-			login.TOTPMethod{TOTP: users},
+			login.TOTPMethod{TOTP: totpFactor},
 			login.EmailCodeMethod(codes, mail),
 		},
 		Policy: login.RequireAny(
@@ -164,11 +175,16 @@ func ExampleSecondFactorAfter() {
 		{Id: "careful", HashPw: hashutil.MustHashPassword("secret"), Enabled: true, TOTPSecret: key.Secret()},
 	}}
 
+	// static users hold the secret themselves; FromGetter turns any
+	// userauth.TOTPGetter into the factor the engine consumes (stores with an
+	// enrolment lifecycle pass a *totp.Service instead)
+	totpFactor, _ := totpsvc.FromGetter(users, 0)
+
 	flow := &login.Flow{
 		Users: users,
 		Methods: []login.Method{
 			login.PasswordMethod{Users: users},
-			login.TOTPMethod{TOTP: users},
+			login.TOTPMethod{TOTP: totpFactor},
 		},
 		// staticusers.Users implements userauth.SecondFactorProvider.
 		Policy:   login.SecondFactorAfter(login.MethodPassword, users),

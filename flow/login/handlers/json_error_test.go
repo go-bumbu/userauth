@@ -29,11 +29,16 @@ func (failingUsers) GetUserByLogin(string) (userauth.User, error) {
 	return userauth.User{}, errors.New("user store down")
 }
 
-// failingTOTP simulates a broken TOTP store: every lookup errors.
+// failingTOTP simulates a broken TOTP factor: every lookup errors, so the
+// policy cannot decide whether to demand a code.
 type failingTOTP struct{}
 
-func (failingTOTP) GetTOTP(string) (userauth.TOTPData, error) {
-	return userauth.TOTPData{}, errors.New("totp store down")
+func (failingTOTP) Verify(string, string) (bool, error) {
+	return false, errors.New("totp store down")
+}
+
+func (failingTOTP) Enabled(string) (bool, error) {
+	return false, errors.New("totp store down")
 }
 
 // failingWriter is a ResponseWriter whose body writes always fail, as when

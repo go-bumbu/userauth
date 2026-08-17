@@ -18,11 +18,7 @@ func loginUser(handler http.Handler, username, password string) []*http.Cookie {
 }
 
 func TestProfilePATCreate(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
+	handler, _, _ := newProfileHandler(t)
 	cookies := loginUser(handler, "demo@example.com", "demo")
 
 	w := demotest.PostForm(handler, "/pat/create", url.Values{"name": {"test"}, "expiry_days": {"30"}}, cookies)
@@ -39,11 +35,7 @@ func TestProfilePATCreate(t *testing.T) {
 }
 
 func TestProfilePATList(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
+	handler, _, _ := newProfileHandler(t)
 	cookies := loginUser(handler, "demo@example.com", "demo")
 
 	// Create a token
@@ -74,11 +66,7 @@ func TestProfilePATList(t *testing.T) {
 }
 
 func TestProfilePATRevoke(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
+	handler, _, _ := newProfileHandler(t)
 	cookies := loginUser(handler, "demo@example.com", "demo")
 
 	// Create a token
@@ -120,11 +108,7 @@ func TestProfilePATRevoke(t *testing.T) {
 }
 
 func TestProfilePATRedirectIfNotAuthenticated(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
+	handler, _, _ := newProfileHandler(t)
 
 	// GET /pat without cookies
 	req := httptest.NewRequest(http.MethodGet, "/pat", nil)
