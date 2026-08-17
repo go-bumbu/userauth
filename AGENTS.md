@@ -35,7 +35,7 @@ make run-demo                    # run demo app on :8084
 - **Auth handlers**: `auth/` — per-request authentication: `cookieauth` (sessions + `LogoutHandler`), `basicauth`, `headerauth`, `chain`
 - **Engines**: `flow/` — multi-step flows that establish credentials: `flow/login` (multi-factor login; attempt stores under `flow/login/attemptstore/`) and `flow/register` (registration; `pendingstore/`, `invite/`)
 - **User stores**: `userstore/` — `staticusers` (YAML/JSON, read-only), `userdb` (GORM+SQLite)
-- **Verification codes**: `service/verificationcode/` — `Service` (policy), `CodeStore`/`Deliverer` interfaces, with `store/memory` and `deliver/{smtp,file}` adapters
+- **Credential services**: `service/` — `verificationcode` (one-time codes + `Deliverer`), `totp` (enrolment + validation), `recoverycodes`, `pat` (personal access tokens), `throttle` (brute-force backoff), `cipher` (secret encryption); each owns policy and delegates persistence to its own store interface
 - **Hashing**: `internal/hashutil/` — bcrypt, SHA-256, AES-256-GCM, numeric code generation
 - **Local dependency**: `go.mod` has `replace` directive for sibling module `go-bumbu/http`
 

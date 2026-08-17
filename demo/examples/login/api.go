@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth/auth/cookieauth"
+	"github.com/go-bumbu/userauth/demo/internal/mfa"
 	flowmemory "github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
 	loginhandlers "github.com/go-bumbu/userauth/flow/login/handlers"
 	"github.com/go-bumbu/userauth/userstore/userdb"
@@ -17,7 +18,7 @@ import (
 // the login endpoint; users with TOTP enrolled (e.g. via /profile) get
 // {"done":false,"next":["totp","recovery"]} and complete at the verify
 // endpoint. The demo mounts LoginHandler and VerifyHandler on the router.
-func API(log *slog.Logger, users *userdb.Store) *loginhandlers.JSON {
+func API(log *slog.Logger, users *userdb.Store, mfaSvc mfa.Services) *loginhandlers.JSON {
 	sesStore, err := cookieauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
 	if err != nil {
 		panic(fmt.Errorf("login api: cookie store: %w", err))
@@ -39,8 +40,8 @@ func API(log *slog.Logger, users *userdb.Store) *loginhandlers.JSON {
 		Users:    users,
 		Session:  sessMgr,
 		Attempts: flowmemory.New(),
-		TOTP:     users,
-		Recovery: users,
+		TOTP:     mfaSvc.TOTP,
+		Recovery: mfaSvc.Recovery,
 		Logger:   log,
 	})
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/go-bumbu/userauth/flow/login/attemptstore/memory"
 	"github.com/go-bumbu/userauth/flow/login/handlers"
 	"github.com/go-bumbu/userauth/internal/hashutil"
+	totpsvc "github.com/go-bumbu/userauth/service/totp"
 	"github.com/go-bumbu/userauth/service/verificationcode"
 	csmemory "github.com/go-bumbu/userauth/service/verificationcode/store/memory"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
@@ -85,6 +86,16 @@ func totpCode(t *testing.T) string {
 	return code
 }
 
+// totpFactor adapts the read-only static store into the factor the preset
+// consumes; enrolment-capable stores pass a *totp.Service instead.
+func totpFactor(users *staticusers.Users) login.TOTPFactor {
+	v, err := totpsvc.FromGetter(users, 0)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
 func passwordTOTPFixture() (*handlers.JSON, *captureLogin) {
 	users := &staticusers.Users{Users: []staticusers.User{
 		{Id: "plain", HashPw: hashutil.MustHashPassword("plain-pw"), Enabled: true},
@@ -96,7 +107,7 @@ func passwordTOTPFixture() (*handlers.JSON, *captureLogin) {
 		Users:    users,
 		Session:  session,
 		Attempts: memory.New(),
-		TOTP:     users,
+		TOTP:     totpFactor(users),
 	})
 	return j, session
 }
@@ -242,7 +253,7 @@ func TestPasswordTOTPRecoveryCode(t *testing.T) {
 			Users:    users,
 			Session:  session,
 			Attempts: memory.New(),
-			TOTP:     users,
+			TOTP:     totpFactor(users),
 			Recovery: acceptRecovery{code: "rescue-123"},
 		})
 		w := postJSON(t, j.LoginHandler(), handlers.LoginPayload{User: "careful", Password: "pw"})

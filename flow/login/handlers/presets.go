@@ -19,8 +19,9 @@ type PasswordTOTPCfg struct {
 	// when TOTP is set.
 	Attempts login.AttemptStore
 	// TOTP enables an authenticator second factor for users that have one
-	// enrolled (data.Enabled). Nil means password-only login.
-	TOTP userauth.TOTPGetter
+	// enrolled. Pass a *totp.Service, or totp.FromGetter(store) for a
+	// read-only user store. Nil means password-only login.
+	TOTP login.TOTPFactor
 	// Recovery optionally lets a recovery code stand in for the TOTP code.
 	Recovery userauth.RecoveryCodeVerifier
 	// Throttle slows down repeated wrong TOTP/recovery guesses, and (via
@@ -73,11 +74,11 @@ func passwordTOTPPolicy(cfg PasswordTOTPCfg) login.Policy {
 		if cfg.TOTP == nil {
 			return true, nil, nil
 		}
-		data, err := cfg.TOTP.GetTOTP(user.ID)
+		enrolled, err := cfg.TOTP.Enabled(user.ID)
 		if err != nil {
 			return false, nil, err
 		}
-		if !data.Enabled ||
+		if !enrolled ||
 			slices.Contains(satisfied, login.MethodTOTP) ||
 			slices.Contains(satisfied, login.MethodRecovery) {
 			return true, nil, nil

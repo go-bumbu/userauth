@@ -106,7 +106,7 @@ const recoveryCodeCharset = "abcdefghijklmnopqrstuvwxyz0123456789"
 // recoveryCodeLength is the length of each generated recovery code.
 const recoveryCodeLength = 8
 
-// GenerateRecoveryCodes returns count plain recovery codes (e.g. for display once to the user). Caller hashes and stores via RecoveryCodeConfigurator.SetRecoveryCodes.
+// GenerateRecoveryCodes returns count plain recovery codes (e.g. for display once to the user). Hashing and storage are service/recoverycodes' job.
 func GenerateRecoveryCodes(count int) ([]string, error) {
 	if count <= 0 || count > 100 {
 		return nil, fmt.Errorf("GenerateRecoveryCodes: count must be 1..100, got %d", count)

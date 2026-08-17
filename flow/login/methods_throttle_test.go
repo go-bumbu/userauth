@@ -22,7 +22,7 @@ func tightThrottle() *login.Throttle {
 
 func TestTOTPMethod_Throttled(t *testing.T) {
 	users := fixtureUsers()
-	m := login.TOTPMethod{TOTP: users, Throttle: tightThrottle()}
+	m := login.TOTPMethod{TOTP: totpFactor(users), Throttle: tightThrottle()}
 
 	t.Run("wrong guesses throttle even the correct code", func(t *testing.T) {
 		for i := 0; i < 2; i++ {
@@ -38,7 +38,7 @@ func TestTOTPMethod_Throttled(t *testing.T) {
 	})
 
 	t.Run("success resets and clears the state", func(t *testing.T) {
-		m := login.TOTPMethod{TOTP: users, Throttle: &login.Throttle{
+		m := login.TOTPMethod{TOTP: totpFactor(users), Throttle: &login.Throttle{
 			Store:        throttlememory.New(),
 			FreeFailures: 2,
 			BaseDelay:    time.Hour,
@@ -61,7 +61,7 @@ func TestTOTPMethod_Throttled(t *testing.T) {
 	})
 
 	t.Run("nil throttle verifies directly", func(t *testing.T) {
-		m := login.TOTPMethod{TOTP: users}
+		m := login.TOTPMethod{TOTP: totpFactor(users)}
 		ok, err := m.Verify("alice", totpCode(t))
 		if err != nil || !ok {
 			t.Fatalf("unthrottled verify: ok=%v err=%v", ok, err)
@@ -70,7 +70,7 @@ func TestTOTPMethod_Throttled(t *testing.T) {
 
 	t.Run("users without TOTP enrolled fail without counting", func(t *testing.T) {
 		th := tightThrottle()
-		m := login.TOTPMethod{TOTP: users, Throttle: th}
+		m := login.TOTPMethod{TOTP: totpFactor(users), Throttle: th}
 		// bob has no TOTP: the not-enrolled gate runs before the throttle
 		for i := 0; i < 3; i++ {
 			if ok, err := m.Verify("bob", "000000"); err != nil || ok {
@@ -120,7 +120,7 @@ func (failingThrottleStore) Clear(_, _ string) error { return errors.New("store 
 
 func TestTOTPMethod_ThrottleStoreErrorIsInternal(t *testing.T) {
 	users := fixtureUsers()
-	m := login.TOTPMethod{TOTP: users, Throttle: &login.Throttle{Store: failingThrottleStore{}}}
+	m := login.TOTPMethod{TOTP: totpFactor(users), Throttle: &login.Throttle{Store: failingThrottleStore{}}}
 
 	if _, err := m.Verify("alice", totpCode(t)); err == nil {
 		t.Fatal("a broken throttle store must surface as an internal error, not a silent pass")

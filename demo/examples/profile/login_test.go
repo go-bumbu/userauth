@@ -7,17 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/internal/demotest"
 	"github.com/pquerna/otp/totp"
 )
 
 func TestProfileLoginOneStepNoTOTP(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
+	handler, users, _ := newProfileHandler(t)
 	uid := "onestep@example.com"
 	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
@@ -35,24 +30,12 @@ func TestProfileLoginOneStepNoTOTP(t *testing.T) {
 }
 
 func TestProfileLoginTwoStepTOTP(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
-	const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- test TOTP secret
+	handler, users, mfaSvc := newProfileHandler(t)
 	uid := "twostep@example.com"
 	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	// 2FA enrolment keys on the canonical user ID, not the login ID
-	usr, err := users.GetUserByLogin(uid)
-	if err != nil {
-		t.Fatalf("get user: %v", err)
-	}
-	if err := users.SetTOTP(usr.ID, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
-		t.Fatalf("set totp: %v", err)
-	}
+	secret := enableTOTP(t, mfaSvc, users, uid)
 
 	w := demotest.PostForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
 	if w.Code != http.StatusOK {
@@ -82,23 +65,12 @@ func TestProfileLoginTwoStepTOTP(t *testing.T) {
 }
 
 func TestProfileLoginTwoStepWrongCode(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
-	const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- test TOTP secret
+	handler, users, mfaSvc := newProfileHandler(t)
 	uid := "wrongcode@example.com"
 	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	usr, err := users.GetUserByLogin(uid)
-	if err != nil {
-		t.Fatalf("get user: %v", err)
-	}
-	if err := users.SetTOTP(usr.ID, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
-		t.Fatalf("set totp: %v", err)
-	}
+	enableTOTP(t, mfaSvc, users, uid)
 	// establish the pending login (password step)
 	_ = demotest.PostForm(handler, "/login", url.Values{"username": {uid}, "password": {"pw"}}, nil)
 

@@ -9,25 +9,53 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-bumbu/userauth"
 	"github.com/go-bumbu/userauth/demo/internal/demotest"
+	"github.com/go-bumbu/userauth/demo/internal/mfa"
 	"github.com/go-bumbu/userauth/userstore/userdb"
 	"github.com/gorilla/mux"
 	"github.com/pquerna/otp/totp"
 )
 
 // mountAPI wires the JSON preset the same way the demo router does.
-func mountAPI(t *testing.T) (http.Handler, *userdb.Store) {
+func mountAPI(t *testing.T) (http.Handler, *userdb.Store, mfa.Services) {
 	t.Helper()
 	users, err := demotest.NewUserStore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	api := API(demotest.Logger(), users)
+	mfaSvc, err := mfa.New(demotest.Logger(), users)
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := API(demotest.Logger(), users, mfaSvc)
 	r := mux.NewRouter()
 	r.Path("/api/login").Methods(http.MethodPost).Handler(api.LoginHandler())
 	r.Path("/api/login/verify").Methods(http.MethodPost).Handler(api.VerifyHandler())
-	return r, users
+	return r, users, mfaSvc
+}
+
+// enableTOTP enrols the user through the service and returns the secret, the
+// way the profile UI does; the service generates it, so the test never writes a
+// secret into the store.
+func enableTOTP(t *testing.T, mfaSvc mfa.Services, users *userdb.Store, loginID string) string {
+	t.Helper()
+	usr, err := users.GetUserByLogin(loginID)
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	enrolment, err := mfaSvc.TOTP.Enroll(usr.ID, loginID)
+	if err != nil {
+		t.Fatalf("enroll: %v", err)
+	}
+	code, err := totp.GenerateCode(enrolment.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("generate code: %v", err)
+	}
+	ok, err := mfaSvc.TOTP.Confirm(usr.ID, code)
+	if err != nil || !ok {
+		t.Fatalf("confirm enrolment: (%v, %v)", ok, err)
+	}
+	return enrolment.Secret
 }
 
 func postJSON(handler http.Handler, path, body string) *httptest.ResponseRecorder {
@@ -53,7 +81,7 @@ func decode(t *testing.T, w *httptest.ResponseRecorder) apiResponse {
 }
 
 func TestAPILoginPasswordOnly(t *testing.T) {
-	handler, _ := mountAPI(t)
+	handler, _, _ := mountAPI(t)
 	w := postJSON(handler, "/api/login", `{"username":"demo","password":"demo"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d; body=%s", w.Code, w.Body.String())
@@ -67,7 +95,7 @@ func TestAPILoginPasswordOnly(t *testing.T) {
 }
 
 func TestAPILoginWrongPassword(t *testing.T) {
-	handler, _ := mountAPI(t)
+	handler, _, _ := mountAPI(t)
 	w := postJSON(handler, "/api/login", `{"username":"demo","password":"nope"}`)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("want 401, got %d", w.Code)
@@ -78,16 +106,8 @@ func TestAPILoginWrongPassword(t *testing.T) {
 }
 
 func TestAPILoginTOTPSecondFactor(t *testing.T) {
-	handler, users := mountAPI(t)
-	const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- test TOTP secret
-	// 2FA enrolment keys on the canonical user ID, not the login ID
-	usr, err := users.GetUserByLogin("demo")
-	if err != nil {
-		t.Fatalf("get user: %v", err)
-	}
-	if err := users.SetTOTP(usr.ID, userauth.TOTPData{Secret: secret, Enabled: true}); err != nil {
-		t.Fatalf("set totp: %v", err)
-	}
+	handler, users, mfaSvc := mountAPI(t)
+	secret := enableTOTP(t, mfaSvc, users, "demo")
 
 	// step 1: password accepted, TOTP required
 	w := postJSON(handler, "/api/login", `{"username":"demo","password":"demo"}`)

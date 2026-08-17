@@ -8,14 +8,30 @@ import (
 	"time"
 
 	"github.com/go-bumbu/userauth/demo/internal/demotest"
+	"github.com/go-bumbu/userauth/demo/internal/mfa"
 	"github.com/go-bumbu/userauth/userstore/userdb"
 	"github.com/pquerna/otp/totp"
 )
 
+// newProfileHandler builds the profile handler with the second-factor services
+// over a fresh seeded store, exactly as demo/main.go wires them.
+func newProfileHandler(t *testing.T) (http.Handler, *userdb.Store, mfa.Services) {
+	t.Helper()
+	users, err := demotest.NewUserStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mfaSvc, err := mfa.New(demotest.Logger(), users)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return New(demotest.Logger(), users, mfaSvc, demotest.Web()), users, mfaSvc
+}
+
 var totpSecretRe = regexp.MustCompile(`totp-secret">([A-Z2-7]+)<`)
 
-// canonicalID resolves the login ID to the canonical user ID that store
-// methods (GetTOTP, GetRecoveryCodesCount, …) key on.
+// canonicalID resolves the login ID to the canonical user ID that the services
+// key on.
 func canonicalID(t *testing.T, users *userdb.Store, loginID string) string {
 	t.Helper()
 	usr, err := users.GetUserByLogin(loginID)
@@ -23,6 +39,27 @@ func canonicalID(t *testing.T, users *userdb.Store, loginID string) string {
 		t.Fatalf("get user %q: %v", loginID, err)
 	}
 	return usr.ID
+}
+
+// enableTOTP enrols a user through the service and returns the secret, the way
+// the profile UI does: the service generates the secret, so tests never write
+// one into the store themselves.
+func enableTOTP(t *testing.T, mfaSvc mfa.Services, users *userdb.Store, loginID string) string {
+	t.Helper()
+	userID := canonicalID(t, users, loginID)
+	enrolment, err := mfaSvc.TOTP.Enroll(userID, loginID)
+	if err != nil {
+		t.Fatalf("enroll: %v", err)
+	}
+	code, err := totp.GenerateCode(enrolment.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("generate code: %v", err)
+	}
+	ok, err := mfaSvc.TOTP.Confirm(userID, code)
+	if err != nil || !ok {
+		t.Fatalf("confirm enrolment: (%v, %v)", ok, err)
+	}
+	return enrolment.Secret
 }
 
 // enrollTOTP logs in a fresh user (one-step), runs setup+confirm, and returns the
@@ -58,29 +95,21 @@ func enrollTOTP(t *testing.T, handler http.Handler, users *userdb.Store, uid str
 }
 
 func TestProfileTOTPEnroll(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
+	handler, users, mfaSvc := newProfileHandler(t)
 	uid := "enroll@example.com"
 	enrollTOTP(t, handler, users, uid)
 
-	data, err := users.GetTOTP(canonicalID(t, users, uid))
+	enabled, err := mfaSvc.TOTP.Enabled(canonicalID(t, users, uid))
 	if err != nil {
-		t.Fatalf("get totp: %v", err)
+		t.Fatalf("totp enabled: %v", err)
 	}
-	if !data.Enabled {
+	if !enabled {
 		t.Error("TOTP should be enabled after confirm")
 	}
 }
 
 func TestProfileTOTPDisable(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
+	handler, users, mfaSvc := newProfileHandler(t)
 	uid := "disable@example.com"
 	cookies, _ := enrollTOTP(t, handler, users, uid)
 
@@ -88,11 +117,11 @@ func TestProfileTOTPDisable(t *testing.T) {
 	if w.Code != http.StatusOK && w.Code != http.StatusSeeOther {
 		t.Fatalf("disable: want 200 or 303, got %d", w.Code)
 	}
-	data, err := users.GetTOTP(canonicalID(t, users, uid))
+	enabled, err := mfaSvc.TOTP.Enabled(canonicalID(t, users, uid))
 	if err != nil {
-		t.Fatalf("get totp: %v", err)
+		t.Fatalf("totp enabled: %v", err)
 	}
-	if data.Enabled {
+	if enabled {
 		t.Error("TOTP should be disabled")
 	}
 }
@@ -100,11 +129,7 @@ func TestProfileTOTPDisable(t *testing.T) {
 var recoveryCodeRe = regexp.MustCompile(`recovery-code">([^<]+)<`)
 
 func TestProfileTOTPRecoveryCodesShown(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
+	handler, users, mfaSvc := newProfileHandler(t)
 	uid := "reccodes@example.com"
 	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
@@ -120,7 +145,7 @@ func TestProfileTOTPRecoveryCodesShown(t *testing.T) {
 	if len(matches) != 6 {
 		t.Fatalf("want 6 recovery codes shown, got %d; body=%s", len(matches), cw.Body.String())
 	}
-	count, err := users.GetRecoveryCodesCount(canonicalID(t, users, uid))
+	count, err := mfaSvc.Recovery.Remaining(canonicalID(t, users, uid))
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
@@ -130,11 +155,7 @@ func TestProfileTOTPRecoveryCodesShown(t *testing.T) {
 }
 
 func TestProfileRecoveryCodeLogin(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
+	handler, users, mfaSvc := newProfileHandler(t)
 	uid := "reclogin@example.com"
 	if err := users.Create(uid, "pw"); err != nil {
 		t.Fatalf("create user: %v", err)
@@ -157,7 +178,7 @@ func TestProfileRecoveryCodeLogin(t *testing.T) {
 	if len(w.Result().Cookies()) == 0 {
 		t.Error("expected a session cookie after recovery-code login")
 	}
-	count, _ := users.GetRecoveryCodesCount(canonicalID(t, users, uid))
+	count, _ := mfaSvc.Recovery.Remaining(canonicalID(t, users, uid))
 	if count != 5 {
 		t.Errorf("want 5 remaining recovery codes after use, got %d", count)
 	}
@@ -171,16 +192,12 @@ func TestProfileRecoveryCodeLogin(t *testing.T) {
 }
 
 func TestProfileTOTPDisableClearsRecoveryCodes(t *testing.T) {
-	users, err := demotest.NewUserStore()
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(demotest.Logger(), users, demotest.Web())
+	handler, users, mfaSvc := newProfileHandler(t)
 	uid := "discodes@example.com"
 	cookies, _ := enrollTOTP(t, handler, users, uid)
 	_ = demotest.PostForm(handler, "/totp/disable", url.Values{}, cookies)
 
-	count, err := users.GetRecoveryCodesCount(canonicalID(t, users, uid))
+	count, err := mfaSvc.Recovery.Remaining(canonicalID(t, users, uid))
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}

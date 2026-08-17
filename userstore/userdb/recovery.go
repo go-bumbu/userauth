@@ -1,26 +1,29 @@
 package userdb
 
 import (
-	"fmt"
-
-	"github.com/go-bumbu/userauth/internal/hashutil"
+	"github.com/go-bumbu/userauth/service/recoverycodes"
 	"gorm.io/gorm"
 )
 
-// MaxRecoveryCodes is the maximum number of recovery codes allowed per user in SetRecoveryCodes.
-const MaxRecoveryCodes = 6
+// RecoveryCodeStore returns the store's recoverycodes.Store view. Persistence
+// only: hashes are stored exactly as service/recoverycodes hands them over, and
+// this store never generates, hashes, or compares codes.
+func (s Store) RecoveryCodeStore() recoverycodes.Store { return recoveryCodeStore{s} }
 
-// SetRecoveryCodes is a store method. Replaces all codes for the user. Accepts at most MaxRecoveryCodes.
-// Delete and inserts run in a single transaction.
-func (s Store) SetRecoveryCodes(userID string, hashedCodes []string) error {
-	if len(hashedCodes) > MaxRecoveryCodes {
-		return fmt.Errorf("recovery codes: at most %d allowed, got %d", MaxRecoveryCodes, len(hashedCodes))
-	}
-	return s.db.Transaction(func(tx *gorm.DB) error {
+// recoveryCodeStore adapts Store to recoverycodes.Store.
+type recoveryCodeStore struct{ s Store }
+
+var _ recoverycodes.Store = recoveryCodeStore{}
+
+// Replace drops every code the user has and stores the given hashes, in one
+// transaction: a half-replaced set would leave the user with codes they were
+// never shown.
+func (r recoveryCodeStore) Replace(userID string, hashes []string) error {
+	return r.s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("user_id = ?", userID).Delete(&recoveryCodeModel{}).Error; err != nil {
 			return err
 		}
-		for _, h := range hashedCodes {
+		for _, h := range hashes {
 			if h == "" {
 				continue
 			}
@@ -32,28 +35,28 @@ func (s Store) SetRecoveryCodes(userID string, hashedCodes []string) error {
 	})
 }
 
-// VerifyRecoveryCode implements userauth.RecoveryCodeVerifier. Consumes the code on success.
-// Loads all stored bcrypt hashes for the user and compares against each (max 6 codes).
-func (s Store) VerifyRecoveryCode(userID, code string) (bool, error) {
-	var codes []recoveryCodeModel
-	err := s.db.Where("user_id = ?", userID).Find(&codes).Error
+// Hashes returns the hashes of the user's unused codes.
+func (r recoveryCodeStore) Hashes(userID string) ([]string, error) {
+	var out []string
+	err := r.s.db.Model(&recoveryCodeModel{}).Where("user_id = ?", userID).
+		Order("id ASC").Pluck("code_hash", &out).Error
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	for _, m := range codes {
-		if hashutil.VerifyRecoveryCodeHash(code, m.CodeHash) {
-			if err := s.db.Delete(&m).Error; err != nil {
-				return false, err
-			}
-			return true, nil
-		}
-	}
-	return false, nil
+	return out, nil
 }
 
-// GetRecoveryCodesCount is a store method.
-func (s Store) GetRecoveryCodesCount(userID string) (int, error) {
+// Delete removes one code by its exact hash; deleting an absent one is not an
+// error. Scoped to the user so two users holding the same hash stay
+// independent.
+func (r recoveryCodeStore) Delete(userID, hash string) error {
+	return r.s.db.Where("user_id = ? AND code_hash = ?", userID, hash).
+		Delete(&recoveryCodeModel{}).Error
+}
+
+// Count returns how many unused codes the user has.
+func (r recoveryCodeStore) Count(userID string) (int, error) {
 	var count int64
-	err := s.db.Model(&recoveryCodeModel{}).Where("user_id = ?", userID).Count(&count).Error
+	err := r.s.db.Model(&recoveryCodeModel{}).Where("user_id = ?", userID).Count(&count).Error
 	return int(count), err
 }

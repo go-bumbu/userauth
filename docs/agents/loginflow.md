@@ -28,10 +28,16 @@ Flow
   .Expiry    time.Duration  attempt lifetime, default 5m
 ```
 
-- **Methods** verify one factor via capability interfaces (`TOTPGetter`,
-  `RecoveryCodeVerifier`, `CodeVerifier`). Well-known IDs: `password`, `totp`,
-  `email`, `sms`, `recovery`. `Method.Verify` must return `(false, nil)` for
-  wrong input and reserve errors for internal failures.
+- **Methods** verify one factor via capability interfaces (`TOTPFactor` —
+  alias of `totp.Verifier`, `RecoveryCodeVerifier`, `CodeVerifier`). Well-known
+  IDs: `password`, `totp`, `email`, `sms`, `recovery`. `Method.Verify` must
+  return `(false, nil)` for wrong input and reserve errors for internal
+  failures.
+- **The engine holds no factor logic beyond the throttle.** `TOTPMethod` wraps a
+  `TOTPFactor` (`*totp.Service`, or `totp.FromGetter(store, skew)` for a
+  read-only store): code validation and enrolment state live in `service/totp`.
+  `RecoveryMethod` wraps a `userauth.RecoveryCodeVerifier`, satisfied by
+  `*recoverycodes.Service`.
 - **Submissions are guarded per login identifier via `Flow.Guard`.** The
   guard runs before any credential work, keyed by the **raw loginID** (never
   the resolved user), so unknown accounts throttle exactly like existing
@@ -49,7 +55,8 @@ Flow
   to `DefaultMaxDelay` 5m; success resets). Backoff, never hard lockout — a
   lockout lets an attacker deny the owner access. A delayed attempt is a
   credential failure (`false, nil`), so the uniform-401 invariant holds.
-  Throttle state lives in a `ThrottleStore`
+  `TOTPMethod` checks `Enabled` before entering the throttle, so a user without
+  TOTP spends no backoff budget. Throttle state lives in a `ThrottleStore`
   (`service/throttle/store/{memory,db}` — db uses the `login_throttle`
   table, one row per user+method, own auto-migration). Delivered codes
   (email/SMS) are instead capped by `verificationcode.Service` per issued
@@ -122,8 +129,9 @@ Response: {done:true} | {done:false, next:["totp",...]} | uniform 401
 Presets construct the whole Flow from a config struct:
 
 - `NewPasswordTOTP(PasswordTOTPCfg)` — password login with optional TOTP second
-  factor (only for users with TOTP enrolled) and optional recovery-code
-  stand-in. Requires `Attempts` when TOTP is set. `Throttle` defaults to an
+  factor (only for users with TOTP enrolled — the policy asks
+  `TOTPFactor.Enabled`) and optional recovery-code stand-in. Requires
+  `Attempts` when TOTP is set. `Throttle` defaults to an
   in-memory throttle (per-instance); multi-instance deployments should pass
   one backed by `service/throttle/store/db`. The same throttle also backs the flow's
   `Guard` (password step).

@@ -43,11 +43,17 @@ type groupModel struct {
 
 func (groupModel) TableName() string { return "user_groups" }
 
-// totpModel stores TOTP secret and enabled flag per user (UserID = user UUID).
+// totpModel stores the TOTP secret and enabled flag per user (UserID = user
+// UUID). Secret is opaque here: service/totp decides whether it holds the
+// base32 secret or its ciphertext, and KeyID names the cipher key that produced
+// it (empty for secrets stored in the clear, and for rows written before this
+// column existed — service/totp treats those as "the current key").
+// Enabled is false while an enrolment awaits its first confirmed code.
 type totpModel struct {
 	ID        uint   `gorm:"primaryKey"`
 	UserID    string `gorm:"uniqueIndex;not null"`
 	Secret    string `gorm:"not null"`
+	KeyID     string
 	Enabled   bool
 	CreatedAt time.Time
 	UpdatedAt time.Time

@@ -3,7 +3,6 @@
 package demotest
 
 import (
-	"crypto/rand"
 	"fmt"
 	"io"
 	"log/slog"
@@ -52,14 +51,9 @@ func NewUserStore() (*userdb.Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open in-memory sqlite: %w", err)
 	}
-	totpKey := make([]byte, 32)
-	if _, err := rand.Read(totpKey); err != nil {
-		return nil, fmt.Errorf("generate TOTP encryption key: %w", err)
-	}
 	mgr, err := userdb.New(db, userdb.Opts{
-		BcryptDifficulty:  4,
-		DefaultEnabled:    true,
-		TOTPEncryptionKey: totpKey,
+		BcryptDifficulty: 4,
+		DefaultEnabled:   true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create db store: %w", err)
