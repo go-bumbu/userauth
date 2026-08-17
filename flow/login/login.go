@@ -163,6 +163,23 @@ func (f *Flow) getEnabledUser(loginID string) (userauth.User, bool, error) {
 	return user, true, nil
 }
 
+// guardAllow asks the guard whether the submission may proceed; true when no
+// guard is set. A denial is a credential-shaped failure and does not itself
+// count as one.
+func (f *Flow) guardAllow(r *http.Request, loginID, methodID string) (bool, error) {
+	if f.Guard == nil {
+		return true, nil
+	}
+	allowed, err := f.Guard.Allow(r, loginID, methodID)
+	if err != nil {
+		return false, fmt.Errorf("login: guard: %w", err)
+	}
+	if !allowed {
+		f.logger().Debug("login: submission throttled", "loginID", loginID, "method", methodID)
+	}
+	return allowed, nil
+}
+
 // guardFail records a credential failure with the guard, when one is set.
 func (f *Flow) guardFail(r *http.Request, loginID, methodID string) error {
 	if f.Guard == nil {
@@ -171,6 +188,44 @@ func (f *Flow) guardFail(r *http.Request, loginID, methodID string) error {
 	if err := f.Guard.Fail(r, loginID, methodID); err != nil {
 		return fmt.Errorf("login: guard: %w", err)
 	}
+	return nil
+}
+
+// verifyGuarded runs the method's verifier and keeps the guard's failure
+// count in sync with the outcome. The bool is false for a wrong credential
+// (already recorded with the guard); a non-nil error is internal.
+func (f *Flow) verifyGuarded(r *http.Request, m Method, user userauth.User, loginID, input string) (bool, error) {
+	ok, err := m.Verify(user.ID, input)
+	if err != nil {
+		return false, fmt.Errorf("login: verify %s: %w", m.ID(), err)
+	}
+	if !ok {
+		f.logger().Debug("login: factor verification failed", "userID", user.ID, "method", m.ID())
+		if err := f.guardFail(r, loginID, m.ID()); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+	if f.Guard != nil {
+		if err := f.Guard.Success(r, loginID, m.ID()); err != nil {
+			return false, fmt.Errorf("login: guard: %w", err)
+		}
+	}
+	return true, nil
+}
+
+// completeLogin creates the session and clears the attempt: the one place a
+// login finishes.
+func (f *Flow) completeLogin(r *http.Request, w http.ResponseWriter, userID string, att Attempt) error {
+	if err := f.Session.LoginUser(r, w, userID, att.SessionKeepLoggedIn); err != nil {
+		return fmt.Errorf("login: create session: %w", err)
+	}
+	if f.Attempts != nil {
+		if err := f.Attempts.Clear(r, w, userID); err != nil {
+			f.logger().Error("login: failed to clear attempt", "userID", userID, "error", err)
+		}
+	}
+	f.logger().Debug("login: login complete", "userID", userID, "satisfied", att.Satisfied)
 	return nil
 }
 
@@ -194,17 +249,10 @@ func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, loginID, methodID,
 	}
 
 	// The guard runs before any credential work, keyed by the raw loginID:
-	// unknown accounts must throttle exactly like existing ones. A denial is
-	// a credential-shaped failure and does not itself count as one.
-	if f.Guard != nil {
-		allowed, err := f.Guard.Allow(r, loginID, methodID)
-		if err != nil {
-			return Result{}, fmt.Errorf("login: guard: %w", err)
-		}
-		if !allowed {
-			f.logger().Debug("login: submission throttled", "loginID", loginID, "method", methodID)
-			return Result{}, nil
-		}
+	// unknown accounts must throttle exactly like existing ones.
+	allowed, err := f.guardAllow(r, loginID, methodID)
+	if err != nil || !allowed {
+		return Result{}, err
 	}
 
 	user, ok, err := f.getEnabledUser(loginID)
@@ -214,10 +262,7 @@ func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, loginID, methodID,
 	if !ok {
 		// Unknown or disabled user: counted, or the guard only ever
 		// throttles guesses against existing accounts.
-		if err := f.guardFail(r, loginID, methodID); err != nil {
-			return Result{}, err
-		}
-		return Result{}, nil
+		return Result{}, f.guardFail(r, loginID, methodID)
 	}
 
 	// From here on, use the canonical user.ID: attempts, verifiers and the
@@ -237,21 +282,9 @@ func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, loginID, methodID,
 		return Result{}, nil
 	}
 
-	ok, err = m.Verify(user.ID, input)
-	if err != nil {
-		return Result{}, fmt.Errorf("login: verify %s: %w", methodID, err)
-	}
-	if !ok {
-		f.logger().Debug("login: factor verification failed", "userID", user.ID, "method", methodID)
-		if err := f.guardFail(r, loginID, methodID); err != nil {
-			return Result{}, err
-		}
-		return Result{}, nil
-	}
-	if f.Guard != nil {
-		if err := f.Guard.Success(r, loginID, methodID); err != nil {
-			return Result{}, fmt.Errorf("login: guard: %w", err)
-		}
+	ok, err = f.verifyGuarded(r, m, user, loginID, input)
+	if err != nil || !ok {
+		return Result{}, err
 	}
 
 	att.Satisfied = append(att.Satisfied, methodID)
@@ -260,15 +293,9 @@ func (f *Flow) Submit(r *http.Request, w http.ResponseWriter, loginID, methodID,
 		return Result{}, err
 	}
 	if done {
-		if err := f.Session.LoginUser(r, w, user.ID, att.SessionKeepLoggedIn); err != nil {
-			return Result{}, fmt.Errorf("login: create session: %w", err)
+		if err := f.completeLogin(r, w, user.ID, att); err != nil {
+			return Result{}, err
 		}
-		if f.Attempts != nil {
-			if err := f.Attempts.Clear(r, w, user.ID); err != nil {
-				f.logger().Error("login: failed to clear attempt", "userID", user.ID, "error", err)
-			}
-		}
-		f.logger().Debug("login: login complete", "userID", user.ID, "satisfied", att.Satisfied)
 		return Result{OK: true, Done: true}, nil
 	}
 
