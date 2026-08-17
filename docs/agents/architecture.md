@@ -30,6 +30,8 @@ userstore/               user persistence: adapters for the root user interfaces
   staticusers/  userdb/
 service/verificationcode/  shared one-time-code service: Service, CodeStore, CodeVerifier,
   store/memory/            Deliverer, with its own store/ and deliver/{smtp,file} adapters
+service/throttle/        brute-force backoff policy: Backoff + Store, consumed by the
+  store/{memory,db}/       login engine (verifier throttle, guard, resend limit) and basicauth
 internal/hashutil/       crypto plumbing (bcrypt, SHA-256, AES-GCM) — not public API
 demo/                    consumer of the library; never imported by it
 ```
@@ -119,13 +121,17 @@ root package in the 2026-08-03 restructure): `Service`, `CodeStore`,
 `CodeVerifier` and `Deliverer` are all defined there.
 
 - **`verificationcode.Service` owns all policy**: numeric code
-  generation, SHA-256 hashing, expiry, and the defaults (length 6, 10 min).
-  Both hashing sites (issue and verify) live in this one type, so the
-  issue/verify hash agreement cannot drift. Construct via
-  `verificationcode.NewService` — zero-valued opts get the defaults.
+  generation, SHA-256 hashing, expiry, the wrong-guess attempt cap, and the
+  defaults (length 6, 10 min, 5 attempts). Both hashing sites (issue and
+  verify) live in this one type, so the issue/verify hash agreement cannot
+  drift. Construct via `verificationcode.NewService` — zero-valued opts get
+  the defaults. The attempt cap cannot be disabled, only sized: codes are
+  short, so the cap is what makes them non-brute-forceable.
 - **`CodeStore` implementations are pure persistence with zero crypto
   knowledge**: `StoreCode(userID, hash, expiresAt)` +
-  `ConsumeCode(userID, hash)` — consume is atomic (one-time use).
+  `ConsumeCode(userID, hash, maxAttempts)` — consume is atomic (one-time
+  use); stores count wrong guesses and delete the code at maxAttempts, but
+  never decide the limit (the service does).
   `service/verificationcode/store/memory` is the in-repo implementation; one instance backs
   one channel (email or SMS).
 - **`CodeVerifier`** (`Verify(userID, code)`) is the channel-neutral login-side

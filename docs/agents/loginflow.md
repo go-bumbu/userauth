@@ -32,6 +32,28 @@ Flow
   `RecoveryCodeVerifier`, `CodeVerifier`). Well-known IDs: `password`, `totp`,
   `email`, `sms`, `recovery`. `Method.Verify` must return `(false, nil)` for
   wrong input and reserve errors for internal failures.
+- **Submissions are guarded per login identifier via `Flow.Guard`.** The
+  guard runs before any credential work, keyed by the **raw loginID** (never
+  the resolved user), so unknown accounts throttle exactly like existing
+  ones and the guard cannot become an account-existence oracle. It is what
+  makes the password step non-brute-forceable per account. Counted failures:
+  unknown user, disabled user, wrong credential; **not** counted:
+  method-not-offered (no secret was tested) and guard denials themselves. A
+  denial is a credential-shaped failure (uniform `Result{OK:false}`).
+  `ThrottleGuard` adapts a `Throttle` (entries namespaced `guard:<method>`);
+  custom guards get the `*http.Request` as an escape hatch for per-IP keys
+  or risk scoring — the library never interprets the request.
+- **Small-keyspace factors are throttled at the verifier.** `TOTPMethod` and
+  `RecoveryMethod` take a `*login.Throttle` (escalating delay per consecutive
+  wrong guess: `DefaultFreeFailures` 3, then `DefaultBaseDelay` 2s doubling up
+  to `DefaultMaxDelay` 5m; success resets). Backoff, never hard lockout — a
+  lockout lets an attacker deny the owner access. A delayed attempt is a
+  credential failure (`false, nil`), so the uniform-401 invariant holds.
+  Throttle state lives in a `ThrottleStore`
+  (`service/throttle/store/{memory,db}` — db uses the `login_throttle`
+  table, one row per user+method, own auto-migration). Delivered codes
+  (email/SMS) are instead capped by `verificationcode.Service` per issued
+  code (`Opts.MaxAttempts`, default 5, code invalidated when exhausted).
 - **`Initiator`** is the optional issuance side of a deliverable factor
   (generate + persist + deliver a code). `CodeMethod` implements it;
   `EmailCodeMethod(codes, deliver)` wires the common email case with
@@ -40,6 +62,15 @@ Flow
   methods are silently skipped, delivery failures are logged, not returned.
   Deliverers should queue and return — synchronous SMTP leaks issuance through
   response timing.
+- **Issuance is rate limited via `Flow.Resend`** (`*login.ResendLimiter`):
+  first code free, then a doubling wait per further request
+  (`DefaultResendInterval` 1m up to `DefaultResendMaxWait` 15m, state
+  forgotten `DefaultResendReset` 1h after the last request). Rate-limited
+  issuance is skipped silently like the other enumeration-safe cases; the
+  previously issued code stays valid. The limiter shares the `ThrottleStore`
+  interface (entries namespaced `initiate:<method>`), so one store instance
+  can back both it and a `Throttle`. Set `Resend` on any flow with
+  deliverable factors — nil means unlimited, i.e. an email/SMS bombing relay.
 - **Policies return decisions only, never side effects.** `RequireAny(Chain...)`
   covers static rules ("password then totp", "or email code alone");
   `SecondFactorAfter(first, provider)` is the classic dynamic 2FA policy (first
@@ -92,9 +123,14 @@ Presets construct the whole Flow from a config struct:
 
 - `NewPasswordTOTP(PasswordTOTPCfg)` — password login with optional TOTP second
   factor (only for users with TOTP enrolled) and optional recovery-code
-  stand-in. Requires `Attempts` when TOTP is set.
+  stand-in. Requires `Attempts` when TOTP is set. `Throttle` defaults to an
+  in-memory throttle (per-instance); multi-instance deployments should pass
+  one backed by `service/throttle/store/db`. The same throttle also backs the flow's
+  `Guard` (password step).
 - `NewEmailCode(EmailCodeCfg)` — passwordless email-code login; single factor,
-  so no attempt store.
+  so no attempt store. `Resend` defaults to an in-memory limiter
+  (per-instance); multi-instance deployments should pass one backed by
+  `service/throttle/store/db`.
 
 Form-based login is deliberately DIY: callers own form parsing/rendering and
 call `Flow.Submit` directly (`demo/examples/login/password.go` shows the
