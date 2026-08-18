@@ -12,6 +12,16 @@ import (
 
 // Run exercises the CodeStore contract against a fresh store per subtest.
 //
+// Atomicity is not verified by this suite. Concurrency cannot be tested this
+// way — a timing-dependent test against an in-memory SQLite would be flaky, and
+// flaky tests in a conformance suite are worse than an honest gap. An
+// implementation must guarantee that two concurrent ConsumeCode calls for the
+// same user and the same correct hash do not both return true; a single-use
+// code consumed twice is a free replay. Serialize the read-decide-delete
+// sequence: the in-memory store holds a mutex for all of ConsumeCode; a SQL
+// store needs the decision and the delete in one transaction, with the delete
+// conditional on the hash so its affected-row count decides the winner.
+//
 //nolint:gocyclo // Conformance suite with multiple test scenarios is inherently complex
 func Run(t *testing.T, newStore func(t *testing.T) verificationcode.CodeStore) {
 	t.Helper()
