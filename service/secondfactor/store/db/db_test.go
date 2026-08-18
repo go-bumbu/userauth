@@ -40,6 +40,13 @@ func TestFlagsRoundTrip(t *testing.T) {
 	if on, err := s.Enabled("u2", userauth.SecondFactorEmail); err != nil || on {
 		t.Fatalf("other user = (%v, %v), want (false, nil)", on, err)
 	}
+
+	if err := s.SetEnabled("u1", userauth.SecondFactorEmail, false); err != nil {
+		t.Fatalf("SetEnabled off: %v", err)
+	}
+	if on, err := s.Enabled("u1", userauth.SecondFactorEmail); err != nil || on {
+		t.Fatalf("disabled flag = (%v, %v), want (false, nil)", on, err)
+	}
 }
 
 func TestFlagAdaptsToAvailability(t *testing.T) {
