@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/go-bumbu/userauth"
+	"github.com/go-bumbu/userauth/service/secondfactor"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -38,6 +39,22 @@ func TestFlagsRoundTrip(t *testing.T) {
 	}
 	if on, err := s.Enabled("u2", userauth.SecondFactorEmail); err != nil || on {
 		t.Fatalf("other user = (%v, %v), want (false, nil)", on, err)
+	}
+}
+
+func TestFlagAdaptsToAvailability(t *testing.T) {
+	store := newStore(t)
+	if err := store.SetEnabled("u1", userauth.SecondFactorSMS, true); err != nil {
+		t.Fatalf("SetEnabled: %v", err)
+	}
+	p := secondfactor.Provider{SMS: secondfactor.Flag{Store: store, Factor: userauth.SecondFactorSMS}}
+
+	got, err := p.AvailableSecondFactors("u1")
+	if err != nil {
+		t.Fatalf("AvailableSecondFactors: %v", err)
+	}
+	if len(got) != 1 || got[0] != userauth.SecondFactorSMS {
+		t.Errorf("got %v, want [sms]", got)
 	}
 }
 
