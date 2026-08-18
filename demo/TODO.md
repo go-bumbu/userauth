@@ -28,7 +28,7 @@ Feature-coverage gaps between the library and the demo, grouped by package.
 - [x] Password change, email change
 - [x] TOTP enrolment with QR provisioning (`Store.SetTOTP`)
 - [x] Recovery code issuance and remaining count
-- [ ] Email change with verification (`Store.StorePendingEmailChange` / `VerifyPendingEmailChange`)
+- [ ] Email change with verification (`Store.StorePendingEmailChange` / `ConsumePendingEmailChange` — caller hashes the code)
 
 ## Admin (`userstore/userdb`)
 - [x] Paginated user list (`Store.List`)

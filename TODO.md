@@ -29,6 +29,14 @@ instead of having severeal user implementaitons, use one with several storage an
 
 ---
 
+## Release tracking
+
+- 2026-08-18: `userdb` split into modular GORM stores (breaking). See
+  `docs/agents/migration-modular-gorm-stores.md`. Next release must be a minor
+  bump with the migration note in the release body.
+
+---
+
 ## Architecture Review (2026-04-03)
 
 Items identified during a full architecture review of the library.
@@ -95,9 +103,10 @@ Items identified during a full architecture review of the library.
   is domain logic (length, expiry, charset), not storage logic. Move to core or a dedicated service.
 - [x] **TOTP enrolment lived in the demo, TOTP/recovery crypto lived in `userdb`**
   Addressed 2026-08: `service/totp` (enrolment, validation, secret encryption via `Opts.Cipher`) and
-  `service/recoverycodes` (generation, bcrypt hashing, single-use consumption) own the policy; `userdb` exposes
-  `TOTPStore()` / `RecoveryCodeStore()` as pure persistence and the write-side root interfaces were removed.
-  The AES cipher shared with `service/pat` moved to `service/cipher`.
+  `service/recoverycodes` (generation, bcrypt hashing, single-use consumption) own the policy;
+  `service/totp/store/db` and `service/recoverycodes/store/db` are pure persistence behind the service
+  interfaces, and the write-side root interfaces were removed. The AES cipher shared with `service/pat`
+  moved to `service/cipher`.
 - [ ] **`dbusers` is coupled to GORM**
   No storage interface at the `userauth` package level. If you want raw SQL or a different ORM, you must rewrite
   the entire store. Define a persistence interface in core. Note: the actual SQL used is portable GORM (no
@@ -136,32 +145,21 @@ see `docs/agents/architecture.md`.
 Ordered by value. The first two are refactors of existing behaviour; the third is a
 new capability and deserves its own design pass.
 
-### 1. Finish the `verificationcode.CodeStore` adapter in `userdb` (phase 2)
+### 1. ~~Finish the `verificationcode.CodeStore` adapter in `userdb` (phase 2)~~
 
-Not a new service — the missing store adapter for the existing one. **This is the
-only item here that closes a live security gap.**
+**DONE 2026-08-18.** `service/verificationcode/store/db` is the GORM `CodeStore`,
+one instance per channel over the `verification_codes` table. The `attempts`
+column exists and atomic consume-or-count is implemented. The old
+`StoreEmailCode`, `VerifyEmailCode`, `StoreSMSCode`, `VerifySMSCode` methods are
+deleted. `service/verificationcode/storetest` conformance suite added and run
+against both `store/memory` and `store/db`.
 
-- `userdb.VerifyEmailCode` / `VerifySMSCode` (`userstore/userdb/email.go:49`,
-  `sms.go:48`) hash the submitted code themselves and **never count attempts**:
-  `emailVerificationCodeModel` / `smsVerificationCodeModel` have no attempts
-  column. A 6-digit code is therefore freely guessable for its whole 10-minute
-  life on the DB path, while the `verificationcode.Service` path caps it. Codes are
-  short — the attempt cap is what makes them non-brute-forceable.
-- Those methods also do not satisfy `verificationcode.CodeVerifier`, so consumers
-  on `userdb` cannot use the login `CodeMethod` / register `EmailCheck` presets and
-  fall back to the uncapped path.
-- Work: `userdb.EmailCodeStore()` / `SMSCodeStore()` returning
-  `verificationcode.CodeStore`, an `attempts` column, atomic consume-or-count,
-  then delete `StoreEmailCode`, `VerifyEmailCode`, `StoreSMSCode`, `VerifySMSCode`.
-- Add the missing `service/verificationcode/storetest` conformance suite while
-  doing it, and run it against `store/memory` **and** the new adapters — the
-  attempt-cap rule is exactly the kind of contract a suite must pin.
-- **Design question this forces**: TOTP enrolment state now belongs to
-  `service/totp`, but email/SMS 2FA enrolment state is still
-  `secondFactorFlagsModel` + `SetEmailCodeEnabled` / `SetSMSCodeEnabled` in the
-  store. Resolve the asymmetry deliberately — either the flags move behind the
-  code service, or document why "channel enabled" is user data rather than
-  factor state.
+The design question about second-factor enrolment flags was resolved:
+`service/secondfactor/store/db` now owns the `second_factor_flags` table (one
+row per factor) and the `Flags` store is composed into `secondfactor.Provider`
+for email/SMS availability. The asymmetry with TOTP is deliberate: TOTP
+enrolment is a secret (the TOTP store owns it), email/SMS enrolment is a
+user preference (the flags store owns it).
 
 ### 2. `service/password` — password crypto and policy are split five ways
 
@@ -205,11 +203,10 @@ Genuine new-service candidate, small and high-leverage. Today:
 ### Belongs in a flow, not a service
 
 - [ ] **Pending email change** — `userdb.StorePendingEmailChange` /
-  `GetPendingEmailChange` / `VerifyPendingEmailChange` (`userstore/userdb/email.go:70-119`)
-  re-implement SHA-256 code hashing and expiry that `verificationcode` already
-  owns. The fix is a multi-step flow (request → verify → apply) composing
-  `verificationcode`, plus **stop hashing in the store**. By the placement rules
-  multi-step ⇒ `flow/`.
+  `GetPendingEmailChange` / `ConsumePendingEmailChange` (`userstore/userdb/email.go`)
+  store a SHA-256 code hash. The fix is a multi-step flow (request → verify → apply)
+  composing `verificationcode` for the code lifecycle, so crypto stays in one
+  place. By the placement rules multi-step ⇒ `flow/`.
 - [ ] **Password reset / account recovery** (open item above) — `flow/passwordreset`
   composing `verificationcode` for the code and `service/password` (#2) for the
   new hash. Not a service.
@@ -223,9 +220,11 @@ Recorded so the next pass does not re-litigate them:
   pure ceremony.
 - **Groups** (`userstore/userdb/groups.go`) — identity facts, never policy; what a
   membership permits is the consuming application's business.
-- **`userdb.List` pagination**, **`staticusers`**, and
-  **`AvailableSecondFactors`** — storage, read-only data, and a derived read
-  respectively. Nothing to extract.
+- **`userdb.List` pagination** and **`staticusers`** — storage and read-only
+  data respectively. Nothing to extract.
+- **`AvailableSecondFactors`** — a derived read. `staticusers` implements
+  `SecondFactorProvider` directly; compose a `secondfactor.Provider` from the
+  satellite stores for the full setup. Not a service.
 - **`login.AttemptStore` / `register.PendingStore`** — correctly engine-scoped;
   their real problem is the HTTP leak listed under *Design & Coupling*.
 

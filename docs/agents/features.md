@@ -39,18 +39,19 @@ check here and in TODO.md — several gaps are known and have a chosen direction
 
 | Feature | Status | Notes |
 |---|---|---|
-| TOTP (authenticator app) | Implemented | `service/totp` — enrolment (`Enroll`/`Confirm`/`Pending`/`Disable`), validation (`Verify`, `Opts.Skew`), `otpauth://` URI + `QRPNG`, secrets optionally AES-256-GCM at rest via `Opts.Cipher`. Stores: `store/memory`, `userdb.TOTPStore()`. Read-only stores adapt with `totp.FromGetter` |
-| Recovery codes | Implemented | `service/recoverycodes` — `Issue` (default 6, bcrypt-hashed, plaintext once), `VerifyRecoveryCode` (single use), `Remaining`, `Clear`. Stores: `store/memory`, `userdb.RecoveryCodeStore()` |
-| Email 2FA | Partial | store layer complete in `userdb` (`VerifyEmailCode`, `email_code_enabled` flag); consumer must wire delivery + frontend |
-| SMS 2FA | Partial | same shape: `VerifySMSCode`, `sms_code_enabled`; same missing consumer wiring |
+| TOTP (authenticator app) | Implemented | `service/totp` — enrolment (`Enroll`/`Confirm`/`Pending`/`Disable`), validation (`Verify`, `Opts.Skew`), `otpauth://` URI + `QRPNG`, secrets optionally AES-256-GCM at rest via `Opts.Cipher`. Stores: `store/memory`, `service/totp/store/db`. Read-only stores adapt with `totp.FromGetter` |
+| Recovery codes | Implemented | `service/recoverycodes` — `Issue` (default 6, bcrypt-hashed, plaintext once), `VerifyRecoveryCode` (single use), `Remaining`, `Clear`. Stores: `store/memory`, `service/recoverycodes/store/db` |
+| Email 2FA | Implemented | `service/verificationcode` — issue/verify; `service/secondfactor/store/db` — per-user enable flag; `service/verificationcode/deliver/smtp` + `deliver/file` — code delivery; consumer wires the service + delivery + frontend |
+| SMS 2FA | Implemented | same shape: `service/verificationcode` for codes, `service/secondfactor/store/db` for the flag; consumer wires delivery + frontend |
 
 TOTP enrolment ships as a service, not as HTTP handlers: the ceremony is
 session-authenticated self-service, so the transport stays with the consumer —
 see `demo/examples/profile/totp.go` for the four-handler pattern.
 
-`SecondFactorProvider.AvailableSecondFactors` (implemented by both stores)
-feeds the `SecondFactorAfter` policy: it reports which of totp/email/sms a user
-has enabled.
+`SecondFactorProvider.AvailableSecondFactors` feeds the `SecondFactorAfter`
+policy: it reports which of totp/email/sms a user has enabled. `staticusers`
+implements it directly; compose a `secondfactor.Provider` from the satellite
+stores for the full setup (or use `userstore/userdb/preset.Full`).
 
 ## User stores (`userstore/`)
 
@@ -60,7 +61,7 @@ has enabled.
 | DB users (GORM) | Implemented | `userdb` — full CRUD, all 2FA interfaces, paginated `List` |
 | User registration | Implemented | `UserRegistrar`; `userdb.Create` enforces username format + bcrypt |
 | Username format policy | Implemented | `UsernameFormat` (any/email/plain), `ValidateLoginID`, enforced at registration |
-| Pending email change | Implemented | `userdb`: `StorePendingEmailChange` / `VerifyPendingEmailChange` (code-confirmed address change) |
+| Pending email change | Implemented | `userdb`: `StorePendingEmailChange` / `ConsumePendingEmailChange` (code-confirmed address change; caller hashes the code) |
 
 ## Verification codes and delivery
 

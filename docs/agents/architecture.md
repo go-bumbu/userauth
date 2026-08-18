@@ -27,15 +27,20 @@ flow/                    engines: multi-step flows that establish credentials
   register/              registration engine (handlers/, pendingstore/{memory,cookie,db},
                          invite/{memory,db})
 userstore/               user persistence: adapters for the root user interfaces
-  staticusers/  userdb/
-service/verificationcode/  shared one-time-code service: Service, CodeStore, CodeVerifier,
-  store/memory/            Deliverer, with its own store/ and deliver/{smtp,file} adapters
+  staticusers/  userdb/    userdb owns users, groups and pending email changes only
+    userdb/preset/         one-call bundle of every GORM store, with the delete cascade
+service/secondfactor/    composes SecondFactorProvider from per-factor availability;
+  store/{memory,db}/       Flags store for factors that are a user preference
+service/totp/            authenticator-app service
+  store/{memory,db}/
+service/recoverycodes/   one-time recovery code service
+  store/{memory,db}/
+service/pat/             personal access tokens
+  store/{memory,db}/
+service/verificationcode/  shared one-time-code service
+  store/{memory,db}/       db is one instance per channel over one table
 service/throttle/        brute-force backoff policy: Backoff + Store, consumed by the
   store/{memory,db}/       login engine (verifier throttle, guard, resend limit) and basicauth
-service/totp/            authenticator-app service: enrolment, validation, secret
-  store/memory/            encryption at rest; Store + Verifier, storetest/ conformance suite
-service/recoverycodes/   one-time recovery code service: generation, bcrypt hashing,
-  store/memory/            single-use consumption; Store, storetest/ conformance suite
 service/cipher/          Secret interface + single-key AESGCM, shared by pat and totp
 internal/hashutil/       crypto plumbing (bcrypt, SHA-256, AES-GCM) — not public API
 demo/                    consumer of the library; never imported by it
@@ -114,7 +119,7 @@ lookup (enabled check at verify time) to a `userauth.UserGetter`.
   tokens still work as apiKeys (dual-use: the hash remains populated).
 - **`TokenStore` implementations are pure persistence**: `Insert`, `GetByTokenID`,
   `ListByUser`, `Delete`, `Touch` (last-used updates). The default is
-  `userstore/userdb`, in-memory is `service/pat/store/memory`.
+  `service/pat/store/db`, in-memory is `service/pat/store/memory`.
 - **`ParseToken`** splits the wire format into its three segments; **`finishVerify`**
   is the shared tail of `Verify` and `VerifyMatch` (expiry, owner lookup and
   enabled flag, throttled last-used touch).
@@ -153,7 +158,7 @@ validation in `flow/login`. Now:
   `recoverycodes.Store` is Replace/Hashes/Delete/Count over bcrypt hashes (the
   service compares and then deletes the matching hash — the store never compares).
   In-memory implementations live under each `store/memory`, the GORM ones are
-  `userdb.TOTPStore()` / `userdb.RecoveryCodeStore()`, and both are held to the
+  `service/totp/store/db` and `service/recoverycodes/store/db`, and both are held to the
   same `storetest.Run` conformance suite.
 - **Encryption moved from `userdb` into the service** (`Opts.Cipher`,
   `service/cipher`). Compatibility: the AEAD context is empty, matching the old
@@ -197,9 +202,11 @@ root package in the 2026-08-03 restructure): `Service`, `CodeStore`,
 - **`CodeVerifier`** (`Verify(userID, code)`) is the channel-neutral login-side
   interface; the service implements it. It replaced the identical
   `EmailCodeVerifier`/`SMSCodeVerifier` pair.
-- `userdb`'s own `VerifyEmailCode`/`VerifySMSCode` predate this design and do
-  **not** satisfy `CodeVerifier` (phase 2 of the redesign — a `CodeStore`
-  adapter on the DB store — has not landed).
+- **Phase 2 landed 2026-08-18**: `service/verificationcode/store/db` is the GORM
+  `CodeStore`, one instance per channel over the `verification_codes` table, with
+  the `attempts` column the contract needs. `userdb`'s own
+  `VerifyEmailCode`/`VerifySMSCode` are gone — they hashed inside the store and
+  could not count attempts.
 - **`Deliverer`** (`Deliver(ctx, to, code, expiresAt)`) is orthogonal:
   `service/verificationcode/deliver/smtp` (HTML template, `@/path` password-from-file) and
   `service/verificationcode/deliver/file` (one file per code, for dev). `expiresAt` is informational —
@@ -210,7 +217,27 @@ root package in the 2026-08-03 restructure): `Service`, `CodeStore`,
 | Store | Package | Implements | Storage |
 |---|---|---|---|
 | Static users | `userstore/staticusers` | `UserGetter`, `TOTPGetter` (wrap in `totp.FromGetter`), `RecoveryCodeVerifier`, `SecondFactorProvider` | In-memory from YAML/JSON, read-only |
-| DB users | `userstore/userdb` | All read interfaces + `UserUpdater`, `UserRegistrar` (`Create`); MFA persistence via `TOTPStore()`, `RecoveryCodeStore()`, `PATStore()` | GORM (+SQLite in tests/demo) |
+| DB users | `userstore/userdb` | `UserGetter`, `UserUpdater`, `UserRegistrar`, `List`, `Bootstrap` | GORM; owns `user_models`, `user_groups`, `user_pending_email_changes` |
+
+Factor and token persistence is **not** in `userdb`: each service ships its own
+GORM store, and each owns one table plus its migration
+(`service/totp/store/db` → `user_totp`, `service/recoverycodes/store/db` →
+`user_recovery_codes`, `service/pat/store/db` → `user_pats`,
+`service/verificationcode/store/db` → `verification_codes`,
+`service/secondfactor/store/db` → `second_factor_flags`). A setup that offers
+no authenticator factor never creates `user_totp`.
+
+`userdb.Delete` cascades into whatever is registered in `Opts.OnDelete` (the
+`UserPurger` contract), after its own transaction has removed the user row. The
+purge is deliberately not atomic — the contract carries no `*gorm.DB` so that a
+purger on any backend can join the cascade, and a failed purge leaks rows keyed
+to a UUID that is never reused rather than leaving a reachable credential.
+`userstore/userdb/preset.Full` wires all of it in one call for consumers who want
+the full feature set.
+
+`AvailableSecondFactors` is no longer a user-store method: compose a
+`secondfactor.Provider` from one `Availability` per factor, so a partial setup
+reports exactly the factors it wired.
 
 The DB store was refactored 2026-06-30
 (`../superpowers/specs/2026-06-30-dbuser-refactor-design.md`): package
@@ -221,12 +248,6 @@ The DB store was refactored 2026-06-30
 ordered by `login_id ASC`, returns `Total`). Note: the spec named the package
 `dbuser`; it has since been renamed again to **`userdb`** — the spec's naming is
 stale, the structure is not.
-
-`userdb` tables: `user_models`, `user_totp` (secret + `key_id` + enabled),
-`user_recovery_codes`,
-`user_email_verification_codes`, `user_sms_verification_codes`,
-`user_second_factor_flags`, `user_pending_email_changes`. Schema auto-migrates
-in `New`, which also validates the TOTP encryption key length.
 
 ## Hashing strategy (`internal/hashutil`)
 
@@ -263,7 +284,9 @@ gorilla/sessions.
 
 ## Known debt
 
-TODO.md carries a 2026-04-03 architecture review with the open items (rate
-limiting hooks, session listing/revocation, `AttemptStore` leaking HTTP
-concerns, coarse error types, audit hooks). Check it before adding a capability
-— the gap may already be catalogued with a chosen direction.
+The 2026-08-18 modular-store split closed the schema-coupling item. Still open:
+`AttemptStore` leaking HTTP concerns, coarse error types, audit hooks, session
+listing/revocation.
+
+TODO.md carries the full 2026-04-03 architecture review. Check it before adding
+a capability — the gap may already be catalogued with a chosen direction.
