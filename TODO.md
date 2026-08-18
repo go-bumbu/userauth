@@ -155,8 +155,10 @@ policy and crypto, the store is pure persistence behind a narrow interface, and 
 `storetest` conformance suite holds every implementation to the same contract** —
 see `docs/agents/architecture.md`.
 
-Ordered by value. The first two are refactors of existing behaviour; the third is a
-new capability and deserves its own design pass.
+Ordered by value. #1 has landed. #2 is a refactor of existing behaviour, #3 is a new
+capability that deserves its own design pass, and #4 is the structural one that
+re-homes what is left of `userdb` — its first two phases landed with the modular
+store split on 2026-08-18, leaving only the `service/user` extraction itself.
 
 ### 1. ~~Finish the `verificationcode.CodeStore` adapter in `userdb` (phase 2)~~
 
@@ -212,6 +214,109 @@ Genuine new-service candidate, small and high-leverage. Today:
 - Largest item here: `gorilla/sessions`' store interface cannot enumerate, so this
   needs a real session store (already noted under *session store* at the top).
 - Pairs with #2 — revoke-all-sessions is what a password change should trigger.
+
+### 4. `service/user` — the last store that still owns its own policy
+
+**Phases 1 and 2 landed 2026-08-18** with the modular GORM store split (see
+`docs/agents/migration-modular-gorm-stores.md`). What that delivered, and what it
+taught, is recorded below the remaining work — read it before starting phase 3,
+because two of this item's original assumptions turned out to be wrong.
+
+**Still open — phase 3, the extraction itself.** `userstore/userdb` is the one place
+where "service owns policy, store owns persistence" was never applied. Everything
+else in `service/` follows it; `userdb` predates the pattern. Extract the policy into
+`service/user` and leave a pure-persistence GORM store behind.
+
+**Policy still living in the store** (the extraction list, line numbers as of
+2026-08-18):
+
+| Site | Policy |
+|---|---|
+| `store.go` + `user.go` | bcrypt cost — belongs to #2, *not* to `service/user` |
+| `store.go` + `user.go` | `usernameFormat` / `ValidateLoginID` on create |
+| `store.go` + `user.go` | `defaultEnabled` for new accounts |
+| `user.go` | UUIDv7 minting — identity policy |
+| `user.go` | `List` limit default 50 / cap 200 |
+| `bootstrap.go` | `Bootstrap` create-if-empty ceremony |
+
+The hardcoded delete cascade is **no longer on this list** — it became the
+`userdb.UserPurger` contract in phase 1.
+
+**Boundary with #2 (`service/password`) — get this right or the two items collide:**
+`service/user` owns the *identity* lifecycle and never touches a hash. It takes an
+already-hashed password on create and exposes a hash-setter; picking algorithm and
+cost, `Verify`, policy validation and rehash-on-login all stay in `service/password`.
+Land #2 first and `service/user` inherits a store that no longer calls bcrypt. This
+did **not** happen in phase 2 — #2 has not landed, so the store still calls bcrypt.
+
+**Target layout:**
+
+```
+userauth.go                  vocabulary — unchanged (User, UserGetter, UserUpdater, …)
+service/user/                Service: loginID format, UUID minting, defaultEnabled,
+                             Bootstrap, list caps, delete cascade
+  store/db/                  user_models + user_groups + user_pending_email_changes
+  store/memory/              new; lets consumers test without SQLite
+  storetest/                 conformance suite, as totp/ and recoverycodes/ have
+userstore/staticusers/       stays: read-only, no lifecycle, no service needed
+```
+
+- **Why the location changes.** `userstore/userdb` is correct *today* under placement
+  rule 2 (root interface ⇒ top-level dir), because `UserGetter`/`UserUpdater`/
+  `UserRegistrar` are root vocabulary. Once a service owns the persistence interface,
+  the store moves under it like every other one. The root interfaces do **not** move —
+  they are consumed by `auth/`, `flow/login`, `flow/register` and `service/pat`, so
+  they stay vocabulary; `service/user.Service` implements them and every consumer
+  compiles unchanged. The break is at wiring only.
+- **`staticusers` stays on the root interfaces directly.** The asymmetry (read-only
+  store bypasses the service, lifecycle store goes through it) is the established
+  `TOTPGetter` + `totp.FromGetter` precedent, not a new wart.
+- **The `Purger` contract moves from the store to the service.** It currently lives on
+  `userdb.Store` as `Opts.OnDelete []UserPurger`; when the service owns the lifecycle
+  it should own the cascade too.
+- **Open questions to settle in the design pass:** does `service/user` own
+  `SetLoginID` (re-validating format) or does that stay a store write? Do
+  `CreateUser` / `CreateUserWithHashedPassword` / the YAML-tagged `userdb.User` struct
+  stay store-level types or move to the service? Does `Bootstrap` belong on the
+  service or in a `preset`? Where does `user_pending_email_changes` go, given the
+  *Belongs in a flow* item below wants it in a flow rather than either layer?
+
+#### What phases 1-2 delivered (2026-08-18)
+
+- Satellite `store/db` packages for `totp`, `recoverycodes`, `pat`,
+  `verificationcode` and `secondfactor`, each owning one table and its own
+  `AutoMigrate`. `userdb` now creates three tables instead of nine, and imports none
+  of the five services (asserted by `go list -deps`).
+- The delete cascade became `userdb.UserPurger` (`PurgeUser(userID string) error`) in
+  `Opts.OnDelete`, non-atomic delete-then-purge, exactly as this item proposed.
+- `AvailableSecondFactors` became composable: it is gone from `userdb`, and
+  `secondfactor.Provider` composes one `Availability` per factor. The flags question
+  raised in #1 was resolved — `service/secondfactor` owns a row-per-factor table, and
+  the asymmetry with TOTP is deliberate (TOTP enrolment is a secret, email/SMS
+  enrolment is a user preference).
+- One-call ergonomics kept via `userstore/userdb/preset.Full`, which lives in a
+  subpackage precisely so `userdb` does not import the factor services.
+- The naming note held: every nested `db` package is import-aliased (`totpdb`,
+  `patdb`, `recoverydb`, `codedb`, `flagsdb`).
+
+#### Two assumptions this item got wrong — do not repeat them in phase 3
+
+- **"Zero data migration" was only true for the tables that moved.** `user_totp`,
+  `user_recovery_codes` and `user_pats` moved untouched. But
+  `user_email_verification_codes` / `user_sms_verification_codes` were *replaced* by a
+  generic `user_verification_codes` table, and the boolean-per-factor
+  `user_second_factor_flags` by a row-per-factor table of the same name — which needs
+  a real data migration. Skipping the flags migration silently downgrades every
+  email/SMS 2FA user to password-only, because an empty factor list reads as "policy
+  satisfied". The justification for not migrating ("`SetEmailCodeEnabled` has zero
+  consumers") was a claim about *this repo*; it was public API of a published library.
+- **"UUIDs are never reused, so an orphaned row is inert" does not hold universally.**
+  It holds for satellites keyed on the canonical user UUID. `flow/login/guard.go`
+  deliberately keys the throttle store on the raw **login identifier**, which is the
+  one identifier that does recycle — so `login_throttle` rows survive deletion and are
+  inherited by the next account with the same login ID. Consequence is availability
+  (an inherited failure counter), not confidentiality. Scope the guarantee when you
+  restate it.
 
 ### Belongs in a flow, not a service
 
