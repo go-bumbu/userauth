@@ -156,12 +156,15 @@ func (s Store) IsEmpty() (bool, error) {
 	return total == 0, err
 }
 
-// Delete permanently removes a user and all associated data (group
-// memberships, TOTP config, recovery codes, verification codes, second-factor
-// flags, pending email changes, personal access tokens), so the login ID can be reused.
+// Delete removes the user and every row this store owns for them, in one
+// transaction, so the login ID can be reused immediately. Satellite stores
+// registered in Opts.OnDelete are then purged, each with its own handle: a purge
+// that fails is reported but not rolled back, leaving rows keyed to a UUID that
+// is never reused — a leak, never a reachable credential. A satellite store that
+// is not registered is not cleaned up at all.
 // Returns userauth.ErrUserNotFound if the user does not exist.
 func (s Store) Delete(userID string) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		res := tx.Where("uuid = ?", userID).Delete(&userModel{})
 		if res.Error != nil {
 			return res.Error
@@ -179,6 +182,25 @@ func (s Store) Delete(userID string) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// The user row is gone before any purger runs: purging first and then
+	// failing to delete the user would destroy a live account's credentials,
+	// whereas a leftover satellite row is keyed to a UUID that is never reused
+	// and can never be reached again. Every purger runs even after one fails, so
+	// a single broken store cannot stop the rest from cleaning up.
+	var purgeErrs []error
+	for _, p := range s.onDelete {
+		if err := p.PurgeUser(userID); err != nil {
+			purgeErrs = append(purgeErrs, err)
+		}
+	}
+	if len(purgeErrs) > 0 {
+		return fmt.Errorf("purge user from satellite stores: %w", errors.Join(purgeErrs...))
+	}
+	return nil
 }
 
 const (
