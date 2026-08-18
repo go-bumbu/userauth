@@ -37,9 +37,9 @@ type app struct {
 	pats    *patsvc.Service
 }
 
-// New demonstrates an authenticated self-service area backed by the
-// userdb.Store: cookie-session password login with an optional TOTP second
-// factor and recovery codes, plus password, email, and two-factor management.
+// New demonstrates an authenticated self-service area backed by the given GORM
+// stores: cookie-session password login with an optional TOTP second factor and
+// recovery codes, plus password, email, and two-factor management.
 func New(log *slog.Logger, stores preset.Stores, mfaSvc mfa.Services, rnd *web.Renderer) http.Handler {
 	users := stores.Users
 	sesStore, err := cookieauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
