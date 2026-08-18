@@ -1,7 +1,7 @@
 // Package profile holds the demo example for an authenticated self-service
-// area backed by userdb.Store: cookie-session password login with an optional
-// TOTP second factor and recovery codes, plus password, email, and two-factor
-// management.
+// area backed by the given GORM stores: cookie-session password login with an
+// optional TOTP second factor and recovery codes, plus password, email, and
+// two-factor management.
 package profile
 
 import (
