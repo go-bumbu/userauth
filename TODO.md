@@ -29,6 +29,19 @@ instead of having severeal user implementaitons, use one with several storage an
 
 ---
 
+## Coverage gate exclusions
+
+- **userstore/userdb/preset** (excluded 2026-08-18): Sits at 73.9% against the
+  80% gate and structurally cannot reach it. `Full` is seven sequential
+  constructor calls each with its own error return, and over one shared
+  `*gorm.DB` only the first is reachable. The alternative — collapsing the
+  seven returns into one site via a table of constructor closures — was
+  rejected because it lets a coverage metric dictate the shape of production
+  code. **Trigger for revisiting:** if `preset` ever grows real logic beyond
+  construction and error wrapping, it goes back under the gate.
+
+---
+
 ## Release tracking
 
 - 2026-08-18: `userdb` split into modular GORM stores (breaking). See
