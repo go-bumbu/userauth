@@ -23,7 +23,9 @@ type CodeStore interface {
 	// success, deletes it (one-time use). It returns false if the code is
 	// absent, expired, or does not match. Each mismatch counts as a failed
 	// attempt; when maxAttempts is reached the code is deleted, so a stored
-	// code can never be guessed by exhausting its keyspace.
+	// code can never be guessed by exhausting its keyspace. The caller must
+	// ensure maxAttempts >= 1 (NewService clamps it, so no store receives
+	// less through the service).
 	ConsumeCode(userID, hash string, maxAttempts int) (bool, error)
 }
 

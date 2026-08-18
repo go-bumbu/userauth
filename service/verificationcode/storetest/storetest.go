@@ -124,6 +124,23 @@ func Run(t *testing.T, newStore func(t *testing.T) verificationcode.CodeStore) {
 		}
 	})
 
+	t.Run("maxAttempts=1: no wrong guesses allowed", func(t *testing.T) {
+		s := newStore(t)
+		if err := s.StoreCode("u1", "right", future); err != nil {
+			t.Fatalf("StoreCode: %v", err)
+		}
+		if ok, err := s.ConsumeCode("u1", "wrong", 1); err != nil || ok {
+			t.Fatalf("wrong guess = (%v, %v), want (false, nil)", ok, err)
+		}
+		ok, err := s.ConsumeCode("u1", "right", 1)
+		if err != nil {
+			t.Fatalf("ConsumeCode after one wrong guess: %v", err)
+		}
+		if ok {
+			t.Error("code still valid after its single allowed failure; maxAttempts=1 must lock out on first miss")
+		}
+	})
+
 	t.Run("storing a new code resets the attempt count", func(t *testing.T) {
 		s := newStore(t)
 		if err := s.StoreCode("u1", "first", future); err != nil {

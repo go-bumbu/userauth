@@ -53,8 +53,7 @@ type Stores struct {
 // Full constructs the user store and every satellite store over db, migrating
 // each table, and registers the satellites as the user store's delete cascade.
 //
-// The satellites are built first: the user store needs them as purgers, so a
-// failure anywhere leaves no half-wired store behind.
+// The satellites are built first so the user store can register them as purgers.
 func Full(db *gorm.DB, opts userdb.Opts) (Stores, error) {
 	totpStore, err := totpdb.New(db)
 	if err != nil {

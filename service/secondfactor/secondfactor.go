@@ -24,6 +24,11 @@ type Availability interface {
 // Availability. A nil field means the factor is not wired at all and is never
 // probed. The order is fixed (TOTP, email, SMS) so login policies see a stable
 // factor list.
+//
+// **An all-nil Provider reports no factors** and is indistinguishable from a
+// wiring mistake, so a password-only setup should pass a nil
+// userauth.SecondFactorProvider when constructing the login policy, not an
+// empty Provider{}. Reserve Provider for when at least one factor is wired.
 type Provider struct {
 	TOTP  Availability
 	Email Availability

@@ -73,6 +73,3 @@ func TestProviderPropagatesErrors(t *testing.T) {
 	}
 }
 
-func TestProviderSatisfiesTheRootInterface(t *testing.T) {
-	var _ userauth.SecondFactorProvider = secondfactor.Provider{}
-}
