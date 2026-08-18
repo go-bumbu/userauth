@@ -58,3 +58,14 @@ func (s *Store) ConsumeCode(userID, hash string, maxAttempts int) (bool, error) 
 	delete(s.codes, userID)
 	return true, nil
 }
+
+// PurgeUser deletes the user's outstanding codes on every channel — not only
+// this Store's channel (which the memory implementation does not track), so one
+// purger wired into a user store's cascade covers them all. It satisfies
+// userdb.UserPurger.
+func (s *Store) PurgeUser(userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.codes, userID)
+	return nil
+}

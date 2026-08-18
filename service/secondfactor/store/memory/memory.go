@@ -41,3 +41,16 @@ func (s *Store) SetEnabled(userID string, factor userauth.SecondFactor, enabled 
 	s.flags[flagKey{userID, factor}] = enabled
 	return nil
 }
+
+// PurgeUser deletes every second-factor flag the user has. It satisfies
+// userdb.UserPurger so this store can join a user-delete cascade.
+func (s *Store) PurgeUser(userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k := range s.flags {
+		if k.userID == userID {
+			delete(s.flags, k)
+		}
+	}
+	return nil
+}

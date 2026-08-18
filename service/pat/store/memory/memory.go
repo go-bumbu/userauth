@@ -88,3 +88,16 @@ func (s *Store) Touch(tokenID string, t time.Time) error {
 	s.recs[tokenID] = rec
 	return nil
 }
+
+// PurgeUser deletes all the user's personal access tokens. It satisfies
+// userdb.UserPurger so this store can join a user-delete cascade.
+func (s *Store) PurgeUser(userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for tokenID, rec := range s.recs {
+		if rec.UserID == userID {
+			delete(s.recs, tokenID)
+		}
+	}
+	return nil
+}

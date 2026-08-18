@@ -46,3 +46,9 @@ func (s *Store) Delete(userID string) error {
 	delete(s.records, userID)
 	return nil
 }
+
+// PurgeUser deletes the user's TOTP enrolment. It satisfies
+// userdb.UserPurger so this store can join a user-delete cascade.
+func (s *Store) PurgeUser(userID string) error {
+	return s.Delete(userID)
+}

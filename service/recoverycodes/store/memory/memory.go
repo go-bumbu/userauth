@@ -59,3 +59,12 @@ func (s *Store) Count(userID string) (int, error) {
 	defer s.mu.RUnlock()
 	return len(s.hashes[userID]), nil
 }
+
+// PurgeUser deletes all the user's recovery code hashes. It satisfies
+// userdb.UserPurger so this store can join a user-delete cascade.
+func (s *Store) PurgeUser(userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.hashes, userID)
+	return nil
+}
