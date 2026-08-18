@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/go-bumbu/userauth/service/secondfactor"
 	"github.com/go-bumbu/userauth/service/totp"
 	"gorm.io/gorm"
 )
@@ -41,6 +42,7 @@ type Store struct {
 }
 
 var _ totp.Store = (*Store)(nil)
+var _ secondfactor.Availability = (*Store)(nil)
 
 // New creates a Store and auto-migrates the user_totp table.
 func New(db *gorm.DB) (*Store, error) {
