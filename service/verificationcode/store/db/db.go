@@ -1,5 +1,5 @@
 // Package db provides a GORM-backed verificationcode.CodeStore. Outstanding
-// codes live in the verification_codes table, one row per channel and user, and
+// codes live in the user_verification_codes table, one row per channel and user, and
 // this package owns the model and its auto-migration.
 //
 // One Store instance backs one channel, matching the service's model: construct
@@ -20,20 +20,20 @@ import (
 )
 
 // codeModel stores one outstanding verification code per channel and user
-// (verification_codes table). CodeHash is a hash — the plaintext code is never
+// (user_verification_codes table). CodeHash is a hash — the plaintext code is never
 // stored — and Attempts counts wrong guesses against it, which is what keeps a
 // short numeric code out of reach of exhaustive guessing.
 type codeModel struct {
 	ID        uint      `gorm:"primaryKey"`
-	Channel   string    `gorm:"index:idx_verification_codes_channel_user,unique;not null"`
-	UserID    string    `gorm:"index:idx_verification_codes_channel_user,unique;not null"`
+	Channel   string    `gorm:"index:idx_user_verification_codes_channel_user,unique;not null"`
+	UserID    string    `gorm:"index:idx_user_verification_codes_channel_user,unique;not null"`
 	CodeHash  string    `gorm:"not null"`
 	ExpiresAt time.Time `gorm:"not null"`
 	Attempts  int       `gorm:"not null"`
 	CreatedAt time.Time
 }
 
-func (codeModel) TableName() string { return "verification_codes" }
+func (codeModel) TableName() string { return "user_verification_codes" }
 
 // Store is a GORM-backed CodeStore for one channel.
 type Store struct {
@@ -43,14 +43,14 @@ type Store struct {
 
 var _ verificationcode.CodeStore = (*Store)(nil)
 
-// New creates a Store for one channel and auto-migrates the verification_codes
+// New creates a Store for one channel and auto-migrates the user_verification_codes
 // table. The channel is an opaque label ("email", "sms", …) that keeps a user's
 // codes for different channels independent; an empty one would make two
 // channels share a row and silently invalidate each other's codes, so it is
 // rejected.
 func New(db *gorm.DB, channel string) (*Store, error) {
 	if channel == "" {
-		return nil, errors.New("verificationcode/store/db: channel must not be empty")
+		return nil, errors.New("service/verificationcode/store/db: channel must not be empty")
 	}
 	if err := db.AutoMigrate(&codeModel{}); err != nil {
 		return nil, err

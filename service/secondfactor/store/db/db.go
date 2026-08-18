@@ -1,5 +1,5 @@
 // Package db provides a GORM-backed secondfactor.Store. Flags live in the
-// second_factor_flags table, one row per user and factor, and this package owns
+// user_second_factor_flags table, one row per user and factor, and this package owns
 // the model and its auto-migration.
 //
 // The factor is a column rather than a boolean per kind, so adding a factor is
@@ -15,19 +15,19 @@ import (
 	"gorm.io/gorm"
 )
 
-// flagModel stores one user's preference for one factor (second_factor_flags
+// flagModel stores one user's preference for one factor (user_second_factor_flags
 // table, UserID = the user's canonical ID). Factor holds the
 // userauth.SecondFactor label.
 type flagModel struct {
 	ID        uint   `gorm:"primaryKey"`
-	UserID    string `gorm:"index:idx_second_factor_flags_user_factor,unique;not null"`
-	Factor    string `gorm:"index:idx_second_factor_flags_user_factor,unique;not null"`
+	UserID    string `gorm:"index:idx_user_second_factor_flags_user_factor,unique;not null"`
+	Factor    string `gorm:"index:idx_user_second_factor_flags_user_factor,unique;not null"`
 	Enabled   bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-func (flagModel) TableName() string { return "second_factor_flags" }
+func (flagModel) TableName() string { return "user_second_factor_flags" }
 
 // Store is a GORM-backed secondfactor.Store.
 type Store struct {
@@ -36,7 +36,7 @@ type Store struct {
 
 var _ secondfactor.Store = (*Store)(nil)
 
-// New creates a Store and auto-migrates the second_factor_flags table.
+// New creates a Store and auto-migrates the user_second_factor_flags table.
 func New(db *gorm.DB) (*Store, error) {
 	if err := db.AutoMigrate(&flagModel{}); err != nil {
 		return nil, err
