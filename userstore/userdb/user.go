@@ -156,12 +156,13 @@ func (s Store) IsEmpty() (bool, error) {
 	return total == 0, err
 }
 
-// Delete removes the user and every row this store owns for them, in one
-// transaction, so the login ID can be reused immediately. Satellite stores
-// registered in Opts.OnDelete are then purged, each with its own handle: a purge
-// that fails is reported but not rolled back, leaving rows keyed to a UUID that
-// is never reused — a leak, never a reachable credential. A satellite store that
-// is not registered is not cleaned up at all.
+// Delete removes the user and the rows this store owns (group memberships and
+// any pending email change) in one transaction, so the login ID can be reused
+// immediately. Satellite stores registered in Opts.OnDelete are then purged,
+// each with its own handle: a purge that fails is reported but not rolled back,
+// leaving rows keyed to a UUID that is never reused — a leak, never a reachable
+// credential. A satellite store that is not registered is not cleaned up at all:
+// what the user store does not know about, it cannot delete.
 // Returns userauth.ErrUserNotFound if the user does not exist.
 func (s Store) Delete(userID string) error {
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -172,10 +173,7 @@ func (s Store) Delete(userID string) error {
 		if res.RowsAffected == 0 {
 			return userauth.ErrUserNotFound
 		}
-		for _, m := range []interface{}{
-			&groupModel{}, &totpModel{}, &recoveryCodeModel{}, &emailVerificationCodeModel{},
-			&smsVerificationCodeModel{}, &secondFactorFlagsModel{}, &pendingEmailChangeModel{}, &patModel{},
-		} {
+		for _, m := range []interface{}{&groupModel{}, &pendingEmailChangeModel{}} {
 			if err := tx.Where("user_id = ?", userID).Delete(m).Error; err != nil {
 				return err
 			}

@@ -7,9 +7,8 @@ import (
 
 // Ensure Store implements the interfaces it claims.
 var (
-	_ userauth.UserGetter           = (*Store)(nil)
-	_ userauth.UserUpdater          = (*Store)(nil)
-	_ userauth.SecondFactorProvider = (*Store)(nil)
+	_ userauth.UserGetter  = (*Store)(nil)
+	_ userauth.UserUpdater = (*Store)(nil)
 )
 
 // Store is an opinionated user manager that stores the information on a gorm database
@@ -34,8 +33,10 @@ type Opts struct {
 // New creates an instance of the user store.
 func New(db *gorm.DB, opts Opts) (*Store, error) {
 
-	// Migrate the schema
-	err := db.AutoMigrate(&userModel{}, &groupModel{}, &totpModel{}, &recoveryCodeModel{}, &emailVerificationCodeModel{}, &smsVerificationCodeModel{}, &secondFactorFlagsModel{}, &pendingEmailChangeModel{}, &patModel{})
+	// Migrate the schema. Only the tables this store owns: factor and token
+	// storage belongs to the services, each with its own store/db package, so a
+	// setup that offers neither never creates their tables.
+	err := db.AutoMigrate(&userModel{}, &groupModel{}, &pendingEmailChangeModel{})
 	if err != nil {
 		return nil, err
 	}

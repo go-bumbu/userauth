@@ -43,70 +43,10 @@ type groupModel struct {
 
 func (groupModel) TableName() string { return "user_groups" }
 
-// totpModel stores the TOTP secret and enabled flag per user (UserID = user
-// UUID). Secret is opaque here: service/totp decides whether it holds the
-// base32 secret or its ciphertext, and KeyID names the cipher key that produced
-// it (empty for secrets stored in the clear, and for rows written before this
-// column existed — service/totp treats those as "the current key").
-// Enabled is false while an enrolment awaits its first confirmed code.
-type totpModel struct {
-	ID        uint   `gorm:"primaryKey"`
-	UserID    string `gorm:"uniqueIndex;not null"`
-	Secret    string `gorm:"not null"`
-	KeyID     string
-	Enabled   bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-func (totpModel) TableName() string { return "user_totp" }
-
-// recoveryCodeModel stores one recovery code hash per row (user_recovery_codes table).
-type recoveryCodeModel struct {
-	ID        uint   `gorm:"primaryKey"`
-	UserID    string `gorm:"index;not null"`
-	CodeHash  string `gorm:"not null"`
-	CreatedAt time.Time
-}
-
-func (recoveryCodeModel) TableName() string { return "user_recovery_codes" }
-
-// emailVerificationCodeModel stores one email verification code per user (user_email_verification_codes table).
-// Replaced on each GenerateEmailVerificationCode.
-type emailVerificationCodeModel struct {
-	ID        uint      `gorm:"primaryKey"`
-	UserID    string    `gorm:"uniqueIndex;not null"`
-	CodeHash  string    `gorm:"not null"`
-	ExpiresAt time.Time `gorm:"not null"`
-	CreatedAt time.Time
-}
-
-func (emailVerificationCodeModel) TableName() string { return "user_email_verification_codes" }
-
-// smsVerificationCodeModel stores one SMS verification code per user (user_sms_verification_codes table).
-type smsVerificationCodeModel struct {
-	ID        uint      `gorm:"primaryKey"`
-	UserID    string    `gorm:"uniqueIndex;not null"`
-	CodeHash  string    `gorm:"not null"`
-	ExpiresAt time.Time `gorm:"not null"`
-	CreatedAt time.Time
-}
-
-func (smsVerificationCodeModel) TableName() string { return "user_sms_verification_codes" }
-
-// secondFactorFlagsModel stores per-user flags for email/SMS 2FA (user_second_factor_flags table).
-type secondFactorFlagsModel struct {
-	ID           uint   `gorm:"primaryKey"`
-	UserID       string `gorm:"uniqueIndex;not null"`
-	EmailEnabled bool
-	SMSEnabled   bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-}
-
-func (secondFactorFlagsModel) TableName() string { return "user_second_factor_flags" }
-
 // pendingEmailChangeModel stores a pending email change awaiting code verification.
+// It stays in the user store, unlike the other one-time codes: committing the
+// new address is a user-profile write, and the row exists only to hold the
+// change until the code confirms it.
 type pendingEmailChangeModel struct {
 	ID        uint      `gorm:"primaryKey"`
 	UserID    string    `gorm:"uniqueIndex;not null"`
@@ -117,23 +57,3 @@ type pendingEmailChangeModel struct {
 }
 
 func (pendingEmailChangeModel) TableName() string { return "user_pending_email_changes" }
-
-// patModel stores one personal access token per row (user_pats table,
-// UserID = user UUID). SecretHash is the SHA-256 hex of the token's secret
-// part; the plaintext is never stored. Scopes is a JSON-encoded []string —
-// opaque to the library, interpreted only by the consuming application.
-type patModel struct {
-	ID         uint   `gorm:"primaryKey"`
-	TokenID    string `gorm:"uniqueIndex;not null"`
-	UserID     string `gorm:"index;not null"`
-	Name       string `gorm:"not null"`
-	SecretHash string `gorm:"not null"`
-	SecretEnc  string // encrypted secret (cipher output); empty for hash-only tokens
-	KeyID      string // cipher key id for SecretEnc; empty for hash-only
-	Scopes     string // JSON-encoded []string; empty when no scopes
-	ExpiresAt  *time.Time
-	LastUsedAt *time.Time
-	CreatedAt  time.Time
-}
-
-func (patModel) TableName() string { return "user_pats" }
