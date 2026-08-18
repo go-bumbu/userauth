@@ -13,13 +13,13 @@ import (
 	"github.com/go-bumbu/userauth/demo/examples/register"
 	"github.com/go-bumbu/userauth/demo/internal/mfa"
 	"github.com/go-bumbu/userauth/demo/web"
-	"github.com/go-bumbu/userauth/userstore/userdb"
+	"github.com/go-bumbu/userauth/userstore/userdb/preset"
 	"github.com/gorilla/mux"
 )
 
 type Cfg struct {
 	Logger      *slog.Logger        // structured logger handed to every example
-	Users       *userdb.Store       // DB-backed store, used by profile, register, admin
+	Stores      preset.Stores       // the full GORM setup, used by profile, register, admin
 	MFA         mfa.Services        // TOTP + recovery code services over Users, shared by profile and the login API
 	StaticUsers userauth.UserGetter // static (in-memory) credentials, used by basicauth, headerauth + passwordlogin
 	Web         *web.Renderer       // server-side template renderer and static-asset server
@@ -31,10 +31,10 @@ type Cfg struct {
 func New(cfg Cfg) http.Handler {
 	sections := []examples.Section{
 		auth.Section(cfg.Logger, cfg.StaticUsers, cfg.Web),
-		login.Section(cfg.Logger, cfg.StaticUsers, cfg.Users, cfg.MFA, cfg.Web),
-		register.Section(cfg.Logger, cfg.Users, cfg.Web),
-		profile.Section(cfg.Logger, cfg.Users, cfg.MFA, cfg.Web),
-		admin.Section(cfg.Logger, cfg.Users, cfg.Web),
+		login.Section(cfg.Logger, cfg.StaticUsers, cfg.Stores.Users, cfg.MFA, cfg.Web),
+		register.Section(cfg.Logger, cfg.Stores.Users, cfg.Web),
+		profile.Section(cfg.Logger, cfg.Stores, cfg.MFA, cfg.Web),
+		admin.Section(cfg.Logger, cfg.Stores.Users, cfg.Web),
 	}
 
 	r := mux.NewRouter()

@@ -17,15 +17,15 @@ import (
 // over a fresh seeded store, exactly as demo/main.go wires them.
 func newProfileHandler(t *testing.T) (http.Handler, *userdb.Store, mfa.Services) {
 	t.Helper()
-	users, err := demotest.NewUserStore()
+	stores, err := demotest.NewStores()
 	if err != nil {
 		t.Fatal(err)
 	}
-	mfaSvc, err := mfa.New(demotest.Logger(), users)
+	mfaSvc, err := mfa.New(demotest.Logger(), stores)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(demotest.Logger(), users, mfaSvc, demotest.Web()), users, mfaSvc
+	return New(demotest.Logger(), stores, mfaSvc, demotest.Web()), stores.Users, mfaSvc
 }
 
 var totpSecretRe = regexp.MustCompile(`totp-secret">([A-Z2-7]+)<`)

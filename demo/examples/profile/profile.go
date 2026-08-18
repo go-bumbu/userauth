@@ -21,6 +21,7 @@ import (
 	"github.com/go-bumbu/userauth/flow/pat/handlers"
 	patsvc "github.com/go-bumbu/userauth/service/pat"
 	"github.com/go-bumbu/userauth/userstore/userdb"
+	"github.com/go-bumbu/userauth/userstore/userdb/preset"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 )
@@ -39,7 +40,8 @@ type app struct {
 // New demonstrates an authenticated self-service area backed by the
 // userdb.Store: cookie-session password login with an optional TOTP second
 // factor and recovery codes, plus password, email, and two-factor management.
-func New(log *slog.Logger, users *userdb.Store, mfaSvc mfa.Services, rnd *web.Renderer) http.Handler {
+func New(log *slog.Logger, stores preset.Stores, mfaSvc mfa.Services, rnd *web.Renderer) http.Handler {
+	users := stores.Users
 	sesStore, err := cookieauth.NewCookieStore(securecookie.GenerateRandomKey(64), securecookie.GenerateRandomKey(32))
 	if err != nil {
 		panic(fmt.Errorf("profile: error instantiating cookie store: %v", err))
@@ -76,7 +78,7 @@ func New(log *slog.Logger, users *userdb.Store, mfaSvc mfa.Services, rnd *web.Re
 		return false, []string{login.MethodTOTP, login.MethodRecovery}, nil
 	})
 
-	pats, err := patsvc.NewService(users.PATStore(), users, patsvc.Opts{Logger: log})
+	pats, err := patsvc.NewService(stores.PATs, users, patsvc.Opts{Logger: log})
 	if err != nil {
 		panic(fmt.Errorf("profile: error creating PAT service: %v", err))
 	}

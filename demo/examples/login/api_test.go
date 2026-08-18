@@ -19,19 +19,19 @@ import (
 // mountAPI wires the JSON preset the same way the demo router does.
 func mountAPI(t *testing.T) (http.Handler, *userdb.Store, mfa.Services) {
 	t.Helper()
-	users, err := demotest.NewUserStore()
+	stores, err := demotest.NewStores()
 	if err != nil {
 		t.Fatal(err)
 	}
-	mfaSvc, err := mfa.New(demotest.Logger(), users)
+	mfaSvc, err := mfa.New(demotest.Logger(), stores)
 	if err != nil {
 		t.Fatal(err)
 	}
-	api := API(demotest.Logger(), users, mfaSvc)
+	api := API(demotest.Logger(), stores.Users, mfaSvc)
 	r := mux.NewRouter()
 	r.Path("/api/login").Methods(http.MethodPost).Handler(api.LoginHandler())
 	r.Path("/api/login/verify").Methods(http.MethodPost).Handler(api.VerifyHandler())
-	return r, users, mfaSvc
+	return r, stores.Users, mfaSvc
 }
 
 // enableTOTP enrols the user through the service and returns the secret, the

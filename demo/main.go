@@ -14,6 +14,7 @@ import (
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/staticusers"
 	"github.com/go-bumbu/userauth/userstore/userdb"
+	"github.com/go-bumbu/userauth/userstore/userdb/preset"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -21,7 +22,7 @@ import (
 func main() {
 	logger := newLogger()
 
-	users, err := newUserStore()
+	stores, err := newStores()
 	if err != nil {
 		panic(fmt.Errorf("init store: %w", err))
 	}
@@ -31,14 +32,14 @@ func main() {
 		{Id: "demo", HashPw: userauth.MustHashPassword("demo"), Enabled: true},
 	}}
 
-	mfaSvc, err := mfa.New(logger, users)
+	mfaSvc, err := mfa.New(logger, stores)
 	if err != nil {
 		panic(fmt.Errorf("init second factors: %w", err))
 	}
 
 	handler := router.New(router.Cfg{
 		Logger:      logger,
-		Users:       users,
+		Stores:      stores,
 		MFA:         mfaSvc,
 		StaticUsers: staticUsers,
 		Web:         web.New(),
@@ -70,24 +71,24 @@ var demoSeedAccounts = []struct{ id, pw string }{
 	{"demo@example.com", "demo"},
 }
 
-func newUserStore() (*userdb.Store, error) {
+func newStores() (preset.Stores, error) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
-		return nil, fmt.Errorf("open in-memory sqlite: %w", err)
+		return preset.Stores{}, fmt.Errorf("open in-memory sqlite: %w", err)
 	}
-	mgr, err := userdb.New(db, userdb.Opts{
+	s, err := preset.Full(db, userdb.Opts{
 		BcryptDifficulty: 4,
 		DefaultEnabled:   true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create db store: %w", err)
+		return preset.Stores{}, fmt.Errorf("create db stores: %w", err)
 	}
 	for _, a := range demoSeedAccounts {
-		if err := mgr.Create(a.id, a.pw); err != nil {
-			return nil, fmt.Errorf("seed user %s: %w", a.id, err)
+		if err := s.Users.Create(a.id, a.pw); err != nil {
+			return preset.Stores{}, fmt.Errorf("seed user %s: %w", a.id, err)
 		}
 	}
-	return mgr, nil
+	return s, nil
 }
 
 func newLogger() *slog.Logger {

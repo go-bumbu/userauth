@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-bumbu/userauth/demo/web"
 	"github.com/go-bumbu/userauth/userstore/userdb"
+	"github.com/go-bumbu/userauth/userstore/userdb/preset"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -45,23 +46,33 @@ var SeedAccounts = []struct{ ID, Pw string }{
 	{"demo@example.com", "demo"},
 }
 
-// NewUserStore returns an in-memory SQLite userdb.Store seeded with SeedAccounts.
-func NewUserStore() (*userdb.Store, error) {
+// NewStores returns the full in-memory SQLite setup seeded with SeedAccounts.
+func NewStores() (preset.Stores, error) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
-		return nil, fmt.Errorf("open in-memory sqlite: %w", err)
+		return preset.Stores{}, fmt.Errorf("open in-memory sqlite: %w", err)
 	}
-	mgr, err := userdb.New(db, userdb.Opts{
+	s, err := preset.Full(db, userdb.Opts{
 		BcryptDifficulty: 4,
 		DefaultEnabled:   true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create db store: %w", err)
+		return preset.Stores{}, fmt.Errorf("create db stores: %w", err)
 	}
 	for _, a := range SeedAccounts {
-		if err := mgr.Create(a.ID, a.Pw); err != nil {
-			return nil, fmt.Errorf("seed user %s: %w", a.ID, err)
+		if err := s.Users.Create(a.ID, a.Pw); err != nil {
+			return preset.Stores{}, fmt.Errorf("seed user %s: %w", a.ID, err)
 		}
 	}
-	return mgr, nil
+	return s, nil
+}
+
+// NewUserStore returns only the user store of NewStores, for examples that need
+// nothing else.
+func NewUserStore() (*userdb.Store, error) {
+	s, err := NewStores()
+	if err != nil {
+		return nil, err
+	}
+	return s.Users, nil
 }
