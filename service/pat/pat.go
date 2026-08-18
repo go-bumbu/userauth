@@ -1,7 +1,7 @@
 // Package pat owns personal-access-token policy: token format, secret
 // hashing, expiry, scopes, and the once-only-plaintext rule. Persistence is
-// delegated to a TokenStore (default implementation in userstore/userdb,
-// in-memory implementation under store/memory). It is the only package that
+// delegated to a TokenStore (GORM implementation in service/pat/store/db,
+// in-memory implementation in service/pat/store/memory). It is the only package that
 // ever sees a token secret.
 package pat
 

@@ -160,9 +160,16 @@ func (s Store) IsEmpty() (bool, error) {
 // any pending email change) in one transaction, so the login ID can be reused
 // immediately. Satellite stores registered in Opts.OnDelete are then purged,
 // each with its own handle: a purge that fails is reported but not rolled back,
-// leaving rows keyed to a UUID that is never reused — a leak, never a reachable
-// credential. A satellite store that is not registered is not cleaned up at all:
-// what the user store does not know about, it cannot delete.
+// leaving rows in satellite tables keyed to the canonical user UUID, which is
+// never reused — a leak, never a reachable credential. A known exception:
+// flow/login/guard keys the throttle store on the raw login identifier, not the
+// UUID, so login_throttle rows survive deletion and are inherited by the next
+// account with the same login ID. A satellite store that is not registered is
+// not cleaned up at all: what the user store does not know about, it cannot
+// delete. On a purge failure, re-calling Delete will not retry the purgers (the
+// user row is already gone, so it returns ErrUserNotFound before reaching the
+// purge loop) — the caller must purge the affected satellite stores directly via
+// their own PurgeUser.
 // Returns userauth.ErrUserNotFound if the user does not exist.
 func (s Store) Delete(userID string) error {
 	err := s.db.Transaction(func(tx *gorm.DB) error {

@@ -68,7 +68,7 @@ stores for the full setup (or use `userstore/userdb/preset.Full`).
 | Feature | Status | Notes |
 |---|---|---|
 | `VerificationCodeService` | Implemented | policy owner: generate, SHA-256 hash, expiry, defaults (6 digits / 10 min) |
-| `CodeStore` backends | Implemented | `service/verificationcode/store/memory` and `service/verificationcode/store/db` (one instance per channel over the `verification_codes` table, with the `attempts` column the `CodeStore` contract needs) |
+| `CodeStore` backends | Implemented | `service/verificationcode/store/memory` and `service/verificationcode/store/db` (one instance per channel over the `user_verification_codes` table, with the `attempts` column the `CodeStore` contract needs) |
 | SMTP delivery | Implemented | `service/verificationcode/deliver/smtp` — HTML template (embedded default or custom path), `@/path` password-from-file |
 | File delivery | Implemented | `service/verificationcode/deliver/file` — one `<timestamp>-<to>.txt` per code; dev/testing |
 

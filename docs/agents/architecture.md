@@ -203,7 +203,7 @@ root package in the 2026-08-03 restructure): `Service`, `CodeStore`,
   interface; the service implements it. It replaced the identical
   `EmailCodeVerifier`/`SMSCodeVerifier` pair.
 - **Phase 2 landed 2026-08-18**: `service/verificationcode/store/db` is the GORM
-  `CodeStore`, one instance per channel over the `verification_codes` table, with
+  `CodeStore`, one instance per channel over the `user_verification_codes` table, with
   the `attempts` column the contract needs. `userdb`'s own
   `VerifyEmailCode`/`VerifySMSCode` are gone — they hashed inside the store and
   could not count attempts.
@@ -223,15 +223,20 @@ Factor and token persistence is **not** in `userdb`: each service ships its own
 GORM store, and each owns one table plus its migration
 (`service/totp/store/db` → `user_totp`, `service/recoverycodes/store/db` →
 `user_recovery_codes`, `service/pat/store/db` → `user_pats`,
-`service/verificationcode/store/db` → `verification_codes`,
-`service/secondfactor/store/db` → `second_factor_flags`). A setup that offers
+`service/verificationcode/store/db` → `user_verification_codes`,
+`service/secondfactor/store/db` → `user_second_factor_flags`). A setup that offers
 no authenticator factor never creates `user_totp`.
 
 `userdb.Delete` cascades into whatever is registered in `Opts.OnDelete` (the
 `UserPurger` contract), after its own transaction has removed the user row. The
 purge is deliberately not atomic — the contract carries no `*gorm.DB` so that a
-purger on any backend can join the cascade, and a failed purge leaks rows keyed
-to a UUID that is never reused rather than leaving a reachable credential.
+purger on any backend can join the cascade, and a failed purge leaks rows in
+satellite tables keyed to the canonical user UUID, which is never reused. A known
+exception: `flow/login/guard` keys the throttle store on the raw login
+identifier, not the UUID, so `login_throttle` rows survive deletion and are
+inherited by the next account with the same login ID — a new user starts
+throttled with the old one's failure count (availability impact, not
+confidentiality — the inherited state is a failure counter, not a credential).
 `userstore/userdb/preset.Full` wires all of it in one call for consumers who want
 the full feature set.
 
