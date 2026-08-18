@@ -58,7 +58,7 @@ stores for the full setup (or use `userstore/userdb/preset.Full`).
 | Feature | Status | Notes |
 |---|---|---|
 | Static users (YAML/JSON) | Implemented | `staticusers` — read-only, no registration |
-| DB users (GORM) | Implemented | `userdb` — full CRUD, all 2FA interfaces, paginated `List` |
+| DB users (GORM) | Implemented | `userdb` — user CRUD (`UserGetter`, `UserUpdater`, `UserRegistrar`), paginated `List`, `Bootstrap`. Factor persistence lives in `service/totp/store/db`, `service/recoverycodes/store/db`, `service/verificationcode/store/db`, `service/secondfactor/store/db` |
 | User registration | Implemented | `UserRegistrar`; `userdb.Create` enforces username format + bcrypt |
 | Username format policy | Implemented | `UsernameFormat` (any/email/plain), `ValidateLoginID`, enforced at registration |
 | Pending email change | Implemented | `userdb`: `StorePendingEmailChange` / `ConsumePendingEmailChange` (code-confirmed address change; caller hashes the code) |
@@ -68,7 +68,7 @@ stores for the full setup (or use `userstore/userdb/preset.Full`).
 | Feature | Status | Notes |
 |---|---|---|
 | `VerificationCodeService` | Implemented | policy owner: generate, SHA-256 hash, expiry, defaults (6 digits / 10 min) |
-| `CodeStore` backends | Partial | `service/verificationcode/store/memory` only; the `userdb` adapter (phase 2 of the hybrid design) has not landed — `userdb`'s verify methods do not satisfy `CodeVerifier` |
+| `CodeStore` backends | Implemented | `service/verificationcode/store/memory` and `service/verificationcode/store/db` (one instance per channel over the `verification_codes` table, with the `attempts` column the `CodeStore` contract needs) |
 | SMTP delivery | Implemented | `service/verificationcode/deliver/smtp` — HTML template (embedded default or custom path), `@/path` password-from-file |
 | File delivery | Implemented | `service/verificationcode/deliver/file` — one `<timestamp>-<to>.txt` per code; dev/testing |
 
@@ -77,7 +77,7 @@ stores for the full setup (or use `userstore/userdb/preset.Full`).
 | Feature | Status | Notes |
 |---|---|---|
 | PAT storage modes | Implemented | `service/pat` — `Mint(..., Storage)`: `HashOnly` (SHA-256 only, verified whole via `Verify`) or `Recoverable` (secret additionally encrypted via `Opts.Cipher` `SecretCipher`; verified via `VerifyMatch(tokenID, match)` for challenge-style credentials). `ErrNotRecoverable` distinguishes "hash-only token presented as challenge" from bad credentials. Token IDs are lowercase base36 so they can serve as virtual usernames; `ParseToken` splits plaintext into (tokenID, secret). Key management is the consumer's: the lib ships single-key `AESGCMCipher`. |
-| Token stores | Implemented | `TokenStore` interface — in-memory (`store/memory`) and GORM (`userstore/userdb`) |
+| Token stores | Implemented | `TokenStore` interface — in-memory (`service/pat/store/memory`) and GORM (`service/pat/store/db`) |
 | Token management | Implemented | `Service.Mint` (create, per-user limit enforced), `List` (user's tokens), `Revoke` (delete), throttled last-used tracking |
 
 ## Not implemented (catalogued in TODO.md)
